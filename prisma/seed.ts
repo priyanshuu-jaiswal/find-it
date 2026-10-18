@@ -105,6 +105,98 @@ async function main() {
     console.log(`[Seed] User ready: ${user.displayName} (${item.role})`);
   }
 
+  // 4. Seed CMR Institute of Technology (CMRIT)
+  const cmrit = await prisma.organization.upsert({
+    where: { slug: 'cmrit-lost-and-found' },
+    update: {},
+    create: {
+      name: 'CMR Institute of Technology',
+      slug: 'cmrit-lost-and-found',
+      verifiedEmailDomain: 'cmrit.ac.in',
+    },
+  });
+  console.log(`[Seed] Organization ready: ${cmrit.name} (${cmrit.slug})`);
+
+  // Grant memberships for CMRIT
+  const allUsers = await prisma.user.findMany();
+  for (const u of allUsers) {
+    const role = u.email === 'carol@apex.edu' ? MemberRole.MODERATOR : MemberRole.MEMBER;
+    await prisma.membership.upsert({
+      where: {
+        organizationId_userId: {
+          organizationId: cmrit.id,
+          userId: u.id,
+        },
+      },
+      update: { role },
+      create: {
+        organizationId: cmrit.id,
+        userId: u.id,
+        role,
+      },
+    });
+  }
+
+  // Seed sample CMRIT items if none exist
+  const existingReports = await prisma.report.count({
+    where: { organizationId: cmrit.id },
+  });
+
+  if (existingReports === 0) {
+    const alice = allUsers.find((u) => u.email === 'alice@apex.edu')!;
+    const bob = allUsers.find((u) => u.email === 'bob@apex.edu')!;
+
+    // 1. Alice lost a Casio fx-991CW Calculator in Basic Science Block
+    await prisma.report.create({
+      data: {
+        organizationId: cmrit.id,
+        ownerId: alice.id,
+        type: 'LOST',
+        category: 'Electronics',
+        title: 'Casio fx-991CW Scientific Calculator',
+        description: 'Black scientific calculator left on desk in BS-302 during 3rd period Mathematics tutorial.',
+        brand: 'Casio',
+        color: 'Black',
+        locationLabel: 'Basic Science Block Room 302',
+        locationArea: 'Basic Science Block',
+      },
+    });
+
+    // 2. Bob found an College ID Card near Central Library
+    await prisma.report.create({
+      data: {
+        organizationId: cmrit.id,
+        ownerId: bob.id,
+        type: 'FOUND',
+        category: 'Documents',
+        title: 'CMRIT Student Smart ID Card (CSE)',
+        description: 'Found blue lanyard ID card near library turnstiles. Handed to security reception.',
+        brand: 'CMRIT',
+        color: 'Blue',
+        locationLabel: 'Central Library Turnstiles',
+        locationArea: 'Central Library',
+      },
+    });
+
+    // 3. Bob found a pair of Boat Rockerz Earbuds in Food Court
+    await prisma.report.create({
+      data: {
+        organizationId: cmrit.id,
+        ownerId: bob.id,
+        type: 'FOUND',
+        category: 'Electronics',
+        title: 'Boat Airdopes 141 Bluetooth Earbuds (Black)',
+        description: 'Left on circular dining table near juice counter. Kept one sticker detail private for claim verification.',
+        brand: 'Boat',
+        color: 'Black',
+        locationLabel: 'Food Court Table 14',
+        locationArea: 'Food Court',
+      },
+    });
+
+    console.log('[Seed] Sample CMRIT reports created successfully.');
+  }
+
   console.log('Database seed completed successfully.');
 }
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { notFound } from 'next/navigation';
 import prisma from '@/src/db';
 import { getSessionUser } from '@/src/auth';
-import { ClaimsInboxWorkspace, ClaimItem } from '@/src/components/claims/claims-inbox-workspace';
+import { HandoffWorkspace, ClaimItem } from '@/src/components/claims/handoff-workspace';
 
 interface ClaimsPageProps {
   params: Promise<{ orgSlug: string }>;
@@ -22,8 +22,8 @@ export default async function ClaimsPage({ params }: ClaimsPageProps) {
   const currentUser = await getSessionUser();
   if (!currentUser) {
     return (
-      <div className="p-8 text-center text-xs text-slate-500 bg-white rounded-3xl border border-slate-200">
-        Authentication required. Switch personas using the bottom-right dock.
+      <div className="p-8 text-center text-xs text-slate-500 bg-white rounded-2xl border border-slate-200">
+        Authentication required. Switch personas using the top persona banner.
       </div>
     );
   }
@@ -91,19 +91,17 @@ export default async function ClaimsPage({ params }: ClaimsPageProps) {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-            Claims & Handoff Inbox
-          </h1>
-          <p className="text-xs text-slate-500 mt-0.5">
-            Manage ownership proofs, approve handoff pickups, and coordinate safe exchanges.
-          </p>
-        </div>
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+          CMRIT Claims & Handoff Inbox
+        </h1>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Review private ownership proofs, approve claim pickups, and coordinate safe exchanges.
+        </p>
       </div>
 
-      <ClaimsInboxWorkspace
+      <HandoffWorkspace
         initialIncoming={incoming.map(formatClaim)}
         initialOutgoing={outgoing.map(formatClaim)}
         currentUserId={currentUser.id}

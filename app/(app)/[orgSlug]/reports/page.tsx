@@ -122,7 +122,7 @@ export default async function ReportsPage({ params, searchParams }: ReportsPageP
             Campus Lost & Found Feed
           </h1>
           <p className="text-sm text-slate-300 max-w-xl mt-1.5 leading-relaxed">
-            Report lost items, browse found property, and let the deterministic engine compute instant candidate matches across Apex University.
+            Report lost items, browse found property, and let the deterministic engine compute instant candidate matches across {org.name}.
           </p>
         </div>
 

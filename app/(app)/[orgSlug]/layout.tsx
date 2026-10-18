@@ -2,8 +2,8 @@ import React from 'react';
 import { notFound } from 'next/navigation';
 import prisma from '@/src/db';
 import { getSessionUser } from '@/src/auth';
+import { PersonaBanner } from '@/src/components/layout/persona-banner';
 import { TopNavbar } from '@/src/components/layout/top-navbar';
-import { PersonaSwitcherDock } from '@/src/components/demo/persona-switcher-dock';
 
 interface OrgLayoutProps {
   children: React.ReactNode;
@@ -41,7 +41,10 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+      {/* Sleek top-banner for instant local persona switching */}
+      <PersonaBanner />
+
       <TopNavbar
         orgSlug={orgSlug}
         currentUser={
@@ -58,9 +61,6 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
         {children}
       </main>
-
-      {/* Persistent floating persona hot-swap & worker control dock */}
-      <PersonaSwitcherDock />
     </div>
   );
 }
