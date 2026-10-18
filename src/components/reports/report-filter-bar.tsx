@@ -1,19 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { SearchIcon, MapPinIcon } from '../ui/icons';
-
-interface FilterState {
-  type: string;
-  category: string;
-  query: string;
-  locationArea: string;
-}
-
-interface ReportFilterBarProps {
-  filters: FilterState;
-  onChange: (newFilters: FilterState) => void;
-}
 
 const CATEGORIES = [
   'All',
@@ -34,7 +23,37 @@ const CAMPUS_ZONES = [
   { value: 'Dining Hall', label: 'Dining Hall' },
 ];
 
-export function ReportFilterBar({ filters, onChange }: ReportFilterBarProps) {
+export function ReportFilterBar() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  const currentType = searchParams.get('type') || '';
+  const currentCategory = searchParams.get('category') || '';
+  const currentQuery = searchParams.get('q') || '';
+  const currentLocationArea = searchParams.get('locationArea') || '';
+
+  const [searchVal, setSearchVal] = useState(currentQuery);
+
+  useEffect(() => {
+    setSearchVal(currentQuery);
+  }, [currentQuery]);
+
+  const updateParam = (key: string, value: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (value) {
+      params.set(key, value);
+    } else {
+      params.delete(key);
+    }
+    router.push(`${pathname}?${params.toString()}`);
+  };
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateParam('q', searchVal.trim());
+  };
+
   return (
     <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-3.5">
       {/* Top row: Type Segmented Toggle + Search Input */}
@@ -42,9 +61,9 @@ export function ReportFilterBar({ filters, onChange }: ReportFilterBarProps) {
         {/* Segmented Type Toggle */}
         <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200/60 shrink-0">
           <button
-            onClick={() => onChange({ ...filters, type: '' })}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-              filters.type === ''
+            onClick={() => updateParam('type', '')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              currentType === ''
                 ? 'bg-white text-slate-900 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
@@ -52,9 +71,9 @@ export function ReportFilterBar({ filters, onChange }: ReportFilterBarProps) {
             All Items
           </button>
           <button
-            onClick={() => onChange({ ...filters, type: 'LOST' })}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-              filters.type === 'LOST'
+            onClick={() => updateParam('type', 'LOST')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              currentType === 'LOST'
                 ? 'bg-white text-rose-700 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
@@ -63,9 +82,9 @@ export function ReportFilterBar({ filters, onChange }: ReportFilterBarProps) {
             Lost Items
           </button>
           <button
-            onClick={() => onChange({ ...filters, type: 'FOUND' })}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-              filters.type === 'FOUND'
+            onClick={() => updateParam('type', 'FOUND')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              currentType === 'FOUND'
                 ? 'bg-white text-emerald-700 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
@@ -76,25 +95,29 @@ export function ReportFilterBar({ filters, onChange }: ReportFilterBarProps) {
         </div>
 
         {/* Search input with ⌘K aesthetic */}
-        <div className="relative flex-1">
+        <form onSubmit={handleSearchSubmit} className="relative flex-1">
           <SearchIcon className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
-            value={filters.query}
-            onChange={(e) => onChange({ ...filters, query: e.target.value })}
+            value={searchVal}
+            onChange={(e) => setSearchVal(e.target.value)}
+            onBlur={() => updateParam('q', searchVal.trim())}
             placeholder="Search items (e.g., MacBook, water bottle, AirPods)..."
             className="w-full pl-9 pr-12 py-2 text-xs bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition placeholder:text-slate-400"
           />
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono font-semibold px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded border border-slate-300">
-            ⌘K
-          </span>
-        </div>
+          <button
+            type="submit"
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono font-semibold px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded border border-slate-300"
+          >
+            Enter
+          </button>
+        </form>
 
         {/* Location Zone Dropdown */}
         <div className="shrink-0">
           <select
-            value={filters.locationArea}
-            onChange={(e) => onChange({ ...filters, locationArea: e.target.value })}
+            value={currentLocationArea}
+            onChange={(e) => updateParam('locationArea', e.target.value)}
             className="w-full sm:w-auto text-xs py-2 px-3 bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-700 font-medium"
           >
             {CAMPUS_ZONES.map((zone) => (
@@ -112,11 +135,11 @@ export function ReportFilterBar({ filters, onChange }: ReportFilterBarProps) {
           Category:
         </span>
         {CATEGORIES.map((cat) => {
-          const isSelected = (cat === 'All' && !filters.category) || filters.category === cat;
+          const isSelected = (cat === 'All' && !currentCategory) || currentCategory === cat;
           return (
             <button
               key={cat}
-              onClick={() => onChange({ ...filters, category: cat === 'All' ? '' : cat })}
+              onClick={() => updateParam('category', cat === 'All' ? '' : cat)}
               className={`px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap transition cursor-pointer ${
                 isSelected
                   ? 'bg-slate-900 text-white shadow-xs'

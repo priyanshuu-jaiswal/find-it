@@ -136,23 +136,7 @@ export default async function ReportsPage({ params, searchParams }: ReportsPageP
       </div>
 
       {/* Filter Bar */}
-      <ReportFilterBar
-        filters={{
-          type: type || '',
-          category: category || '',
-          query: q || '',
-          locationArea: locationArea || '',
-        }}
-        onChange={(newFilters) => {
-          // Client-side URL sync via window
-          const search = new URLSearchParams();
-          if (newFilters.type) search.set('type', newFilters.type);
-          if (newFilters.category) search.set('category', newFilters.category);
-          if (newFilters.query) search.set('q', newFilters.query);
-          if (newFilters.locationArea) search.set('locationArea', newFilters.locationArea);
-          window.location.search = search.toString();
-        }}
-      />
+      <ReportFilterBar />
 
       {/* Listings Grid */}
       {formattedReports.length === 0 ? (
