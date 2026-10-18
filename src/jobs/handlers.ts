@@ -1,6 +1,7 @@
 import prisma from '@/src/db';
 import { storageAdapter } from '@/src/modules/uploads/storage-adapter';
 import { imageProcessor } from '@/src/modules/uploads/image-processor';
+import { candidatesService } from '@/src/modules/matching/candidates';
 import logger from '@/src/lib/logger';
 
 export interface ProcessImagePayload {
@@ -54,6 +55,6 @@ export async function handleProcessImage(payload: ProcessImagePayload): Promise<
 }
 
 export async function handleComputeMatches(payload: ComputeMatchesPayload): Promise<void> {
-  logger.info({ reportId: payload.reportId }, 'Compute matches job triggered (full scoring implemented in Phase 2)');
-  // Phase 2 will execute the complete deterministic candidate matching engine
+  logger.info({ reportId: payload.reportId }, 'Running candidate match computation');
+  await candidatesService.computeMatchesForReport(payload.reportId, payload.organizationId);
 }
