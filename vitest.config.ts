@@ -9,6 +9,7 @@ export default defineConfig(({ mode }) => {
     test: {
       environment: 'node',
       globals: true,
+      fileParallelism: false,
       env: {
         ...env,
         DATABASE_URL: env.DATABASE_URL || 'postgresql://findit:findit@localhost:5432/findit?schema=public',
