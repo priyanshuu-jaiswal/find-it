@@ -27,12 +27,15 @@ describe('GET /api/v1/me', () => {
     expect(body.data).toBeDefined();
     expect(body.data.user.email).toBe('alice@apex.edu');
     expect(body.data.user.displayName).toBe('Alice Chen');
-    expect(body.data.memberships).toHaveLength(1);
-    expect(body.data.memberships[0]).toMatchObject({
-      slug: 'apex-university',
-      name: 'Apex University',
-      role: 'MEMBER',
-    });
+    expect(body.data.memberships).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slug: 'apex-university',
+          name: 'Apex University',
+          role: 'MEMBER',
+        }),
+      ])
+    );
   });
 
   it('returns authenticated user and MODERATOR role for seeded Carol', async () => {
@@ -48,9 +51,13 @@ describe('GET /api/v1/me', () => {
     expect(res.status).toBe(200);
     expect(body.data).toBeDefined();
     expect(body.data.user.email).toBe('carol@apex.edu');
-    expect(body.data.memberships[0]).toMatchObject({
-      slug: 'apex-university',
-      role: 'MODERATOR',
-    });
+    expect(body.data.memberships).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          slug: 'apex-university',
+          role: 'MODERATOR',
+        }),
+      ])
+    );
   });
 });

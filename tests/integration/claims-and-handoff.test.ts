@@ -16,6 +16,9 @@ describe('Phase 3: Claims, Concurrency & Handoff Integration', () => {
   let claim2Id: string; // Carol's claim (seeded moderator acting as claimant for test)
   let aliceId: string;
   let bobId: string;
+  let approvedClaimId: string;
+  let rejectedClaimId: string;
+  let approvedClaimantEmail: string;
 
   beforeAll(async () => {
     const org = await prisma.organization.findUniqueOrThrow({
@@ -237,42 +240,50 @@ describe('Phase 3: Claims, Concurrency & Handoff Integration', () => {
         },
       });
       expect(approvedClaims).toHaveLength(1);
+      approvedClaimId = approvedClaims[0].id;
+      if (approvedClaimId === claim1Id) {
+        rejectedClaimId = claim2Id;
+        approvedClaimantEmail = 'alice@apex.edu';
+      } else {
+        rejectedClaimId = claim1Id;
+        approvedClaimantEmail = 'carol@apex.edu';
+      }
     });
   });
 
   describe('Gated Messaging After Approval', () => {
     it('allows owner and claimant to exchange messages once approved', async () => {
       // 1. Bob (owner) posts a message to coordinate handoff
-      const msg1Req = new NextRequest(`http://localhost:3000/api/v1/claims/${claim1Id}/messages`, {
+      const msg1Req = new NextRequest(`http://localhost:3000/api/v1/claims/${approvedClaimId}/messages`, {
         method: 'POST',
         headers: { 'x-test-email': 'bob@apex.edu' },
         body: JSON.stringify({
-          body: 'Hi Alice, I have your laptop. Can we meet at the campus safety office at 3 PM?',
+          body: 'Hi, I have your laptop. Can we meet at the campus safety office at 3 PM?',
         }),
       });
-      const msg1Res = await postMessageRoute(msg1Req, { params: Promise.resolve({ id: claim1Id }) });
+      const msg1Res = await postMessageRoute(msg1Req, { params: Promise.resolve({ id: approvedClaimId }) });
       const msg1Json = await msg1Res.json();
 
       expect(msg1Res.status).toBe(201);
       expect(msg1Json.data.body).toContain('safety office');
       expect(msg1Json.data.senderName).toBe('Bob Smith');
 
-      // 2. Alice (claimant) replies
-      const msg2Req = new NextRequest(`http://localhost:3000/api/v1/claims/${claim1Id}/messages`, {
+      // 2. Claimant replies
+      const msg2Req = new NextRequest(`http://localhost:3000/api/v1/claims/${approvedClaimId}/messages`, {
         method: 'POST',
-        headers: { 'x-test-email': 'alice@apex.edu' },
+        headers: { 'x-test-email': approvedClaimantEmail },
         body: JSON.stringify({
           body: 'Perfect! I will bring my student ID. See you then.',
         }),
       });
-      const msg2Res = await postMessageRoute(msg2Req, { params: Promise.resolve({ id: claim1Id }) });
+      const msg2Res = await postMessageRoute(msg2Req, { params: Promise.resolve({ id: approvedClaimId }) });
       expect(msg2Res.status).toBe(201);
 
       // 3. Retrieve thread
-      const listMsgReq = new NextRequest(`http://localhost:3000/api/v1/claims/${claim1Id}/messages`, {
-        headers: { 'x-test-email': 'alice@apex.edu' },
+      const listMsgReq = new NextRequest(`http://localhost:3000/api/v1/claims/${approvedClaimId}/messages`, {
+        headers: { 'x-test-email': approvedClaimantEmail },
       });
-      const listMsgRes = await getMessagesRoute(listMsgReq, { params: Promise.resolve({ id: claim1Id }) });
+      const listMsgRes = await getMessagesRoute(listMsgReq, { params: Promise.resolve({ id: approvedClaimId }) });
       const listMsgJson = await listMsgRes.json();
 
       expect(listMsgRes.status).toBe(200);
@@ -284,16 +295,16 @@ describe('Phase 3: Claims, Concurrency & Handoff Integration', () => {
 
   describe('Atomic Handoff Confirmation', () => {
     it('confirms physical handoff, marks claim HANDOFF_CONFIRMED, resolves parent report, and auto-rejects pending claims', async () => {
-      // Alice confirms physical exchange
-      const confirmReq = new NextRequest(`http://localhost:3000/api/v1/claims/${claim1Id}/confirm-handoff`, {
+      // Claimant confirms physical exchange
+      const confirmReq = new NextRequest(`http://localhost:3000/api/v1/claims/${approvedClaimId}/confirm-handoff`, {
         method: 'POST',
-        headers: { 'x-test-email': 'alice@apex.edu' },
+        headers: { 'x-test-email': approvedClaimantEmail },
         body: JSON.stringify({
           note: 'Met at safety desk, device unlocked successfully with my PIN',
         }),
       });
 
-      const confirmRes = await confirmHandoffRoute(confirmReq, { params: Promise.resolve({ id: claim1Id }) });
+      const confirmRes = await confirmHandoffRoute(confirmReq, { params: Promise.resolve({ id: approvedClaimId }) });
       const confirmJson = await confirmRes.json();
 
       expect(confirmRes.status).toBe(200);
@@ -306,9 +317,9 @@ describe('Phase 3: Claims, Concurrency & Handoff Integration', () => {
       expect(resolvedReport.status).toBe('RESOLVED');
       expect(resolvedReport.resolvedAt).not.toBeNull();
 
-      // 2. Verify competing claim (Carol's claim2) is auto-rejected
+      // 2. Verify competing claim is auto-rejected
       const competingClaim = await prisma.claim.findUniqueOrThrow({
-        where: { id: claim2Id },
+        where: { id: rejectedClaimId },
       });
       expect(competingClaim.status).toBe('REJECTED');
       expect(competingClaim.decisionNote).toContain('Auto-rejected');
