@@ -65,9 +65,28 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 });
 
 export async function getSessionUser(req?: Request) {
-  // 1. Check for test header in dev/test mode for rapid testing/Playwright
-  if (process.env.NODE_ENV !== 'production' && req) {
-    const testEmail = req.headers.get('x-test-email');
+  // 1. Check for test header or persona cookie in dev/test mode for rapid testing/Playwright/Demo
+  if (process.env.NODE_ENV !== 'production') {
+    let testEmail = req?.headers?.get?.('x-test-email');
+    if (!testEmail && req && 'cookies' in req) {
+      testEmail = (req as any).cookies?.get?.('findit-persona')?.value;
+    }
+    if (!testEmail && req?.headers?.get?.('cookie')) {
+      const cookieHeader = req.headers.get('cookie') || '';
+      const match = cookieHeader.match(/(?:^|;\s*)findit-persona=([^;]+)/);
+      if (match) {
+        testEmail = decodeURIComponent(match[1]);
+      }
+    }
+    if (!testEmail) {
+      try {
+        const { cookies } = await import('next/headers');
+        const cookieStore = await cookies();
+        testEmail = cookieStore.get('findit-persona')?.value;
+      } catch {
+        // Outside Next.js request store context
+      }
+    }
     if (testEmail) {
       const user = await prisma.user.findUnique({
         where: { email: testEmail.toLowerCase().trim() },
