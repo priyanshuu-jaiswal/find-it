@@ -1,0 +1,298 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum ReportType {
+  LOST
+  FOUND
+
+  @@map("report_type")
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  WITHDRAWN
+  EXPIRED
+  HIDDEN
+
+  @@map("report_status")
+}
+
+enum ClaimStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  WITHDRAWN
+  HANDOFF_CONFIRMED
+
+  @@map("claim_status")
+}
+
+enum MemberRole {
+  MEMBER
+  MODERATOR
+  ORG_ADMIN
+
+  @@map("member_role")
+}
+
+enum ImageStatus {
+  PENDING_UPLOAD
+  PROCESSING
+  READY
+  REJECTED
+
+  @@map("image_status")
+}
+
+model User {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authSubject String    @unique @map("auth_subject")
+  email       String    @unique
+  displayName String    @map("display_name")
+  disabledAt  DateTime? @map("disabled_at") @db.Timestamptz
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  memberships        Membership[]
+  reports            Report[]
+  images             ReportImage[]
+  claims             Claim[]            @relation("UserClaims")
+  decisions          Claim[]            @relation("UserDecisions")
+  messages           ClaimMessage[]
+  moderationReports  ModerationReport[] @relation("ReportedBy")
+  reviewedModerations ModerationReport[] @relation("ReviewedBy")
+  auditEvents        AuditEvent[]
+  matchFeedbacks     MatchFeedback[]
+
+  @@map("users")
+}
+
+model Organization {
+  id                   String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                 String
+  slug                 String   @unique
+  verifiedEmailDomain  String?  @map("verified_email_domain")
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  memberships   Membership[]
+  reports       Report[]
+  images        ReportImage[]
+  matches       ReportMatch[]
+  auditEvents   AuditEvent[]
+
+  @@map("organizations")
+}
+
+model Membership {
+  organizationId String     @map("organization_id") @db.Uuid
+  userId         String     @map("user_id") @db.Uuid
+  role           MemberRole @default(MEMBER)
+  joinedAt       DateTime   @default(now()) @map("joined_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([organizationId, userId])
+  @@map("memberships")
+}
+
+model Report {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  ownerId        String       @map("owner_id") @db.Uuid
+  type           ReportType
+  status         ReportStatus @default(OPEN)
+  category       String
+  title          String
+  description    String
+  color          String?
+  brand          String?
+  occurredAt     DateTime?    @map("occurred_at") @db.Timestamptz
+  locationLabel  String       @map("location_label")
+  locationArea   String?      @map("location_area")
+  searchDocument Unsupported("tsvector")? @map("search_document")
+  expiresAt      DateTime     @default(dbgenerated("(now() + '90 days'::interval)")) @map("expires_at") @db.Timestamptz
+  version        Int          @default(1)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  resolvedAt     DateTime?    @map("resolved_at") @db.Timestamptz
+
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  owner              User               @relation(fields: [ownerId], references: [id])
+  images             ReportImage[]
+  feature            ReportFeature?
+  lostMatches        ReportMatch[]      @relation("LostReport")
+  foundMatches       ReportMatch[]      @relation("FoundReport")
+  claims             Claim[]
+  moderationReports  ModerationReport[]
+
+  @@index([organizationId, status, type, createdAt(sort: Desc)], map: "reports_feed_idx")
+  @@index([ownerId, createdAt(sort: Desc)], map: "reports_owner_idx")
+  @@map("reports")
+}
+
+model ReportImage {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportId       String?     @map("report_id") @db.Uuid
+  uploaderId     String      @map("uploader_id") @db.Uuid
+  organizationId String      @map("organization_id") @db.Uuid
+  rawObjectKey   String      @unique @map("raw_object_key")
+  thumbObjectKey String?     @unique @map("thumb_object_key")
+  status         ImageStatus @default(PENDING_UPLOAD)
+  contentType    String      @map("content_type")
+  byteSize       BigInt      @map("byte_size")
+  width          Int?
+  height         Int?
+  sha256         String?
+  expiresAt      DateTime    @default(dbgenerated("(now() + '15 minutes'::interval)")) @map("expires_at") @db.Timestamptz
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz
+
+  report       Report?      @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  uploader     User         @relation(fields: [uploaderId], references: [id])
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@map("report_images")
+}
+
+model ReportFeature {
+  reportId        String   @id @map("report_id") @db.Uuid
+  normalizedTerms String[] @default([]) @map("normalized_terms")
+  featureVersion  String   @map("feature_version")
+  updatedAt       DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  report Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+
+  @@map("report_features")
+}
+
+model ReportMatch {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId   String   @map("organization_id") @db.Uuid
+  lostReportId     String   @map("lost_report_id") @db.Uuid
+  foundReportId    String   @map("found_report_id") @db.Uuid
+  score            Float    @db.Real
+  reasons          Json     @default("[]")
+  algorithmVersion String   @map("algorithm_version")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  lostReport   Report          @relation("LostReport", fields: [lostReportId], references: [id], onDelete: Cascade)
+  foundReport  Report          @relation("FoundReport", fields: [foundReportId], references: [id], onDelete: Cascade)
+  feedbacks    MatchFeedback[]
+
+  @@unique([lostReportId, foundReportId])
+  @@index([organizationId, lostReportId, score(sort: Desc)], map: "matches_lost_idx")
+  @@index([organizationId, foundReportId, score(sort: Desc)], map: "matches_found_idx")
+  @@map("report_matches")
+}
+
+model MatchFeedback {
+  matchId   String   @map("match_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  dismissed Boolean  @default(false)
+  useful    Boolean?
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  match ReportMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([matchId, userId])
+  @@map("match_feedback")
+}
+
+model Claim {
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportId     String      @map("report_id") @db.Uuid
+  claimantId   String      @map("claimant_id") @db.Uuid
+  status       ClaimStatus @default(PENDING)
+  proofText    String      @map("proof_text")
+  decisionBy   String?     @map("decision_by") @db.Uuid
+  decisionNote String?     @map("decision_note")
+  createdAt    DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  decidedAt    DateTime?   @map("decided_at") @db.Timestamptz
+  updatedAt    DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  report        Report         @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  claimant      User           @relation("UserClaims", fields: [claimantId], references: [id])
+  decisionMaker User?          @relation("UserDecisions", fields: [decisionBy], references: [id])
+  messages      ClaimMessage[]
+
+  @@unique([reportId, claimantId])
+  @@index([reportId, status, createdAt(sort: Desc)], map: "claims_report_idx")
+  @@index([claimantId, status, createdAt(sort: Desc)], map: "claims_claimant_idx")
+  @@map("claims")
+}
+
+model ClaimMessage {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  claimId   String   @map("claim_id") @db.Uuid
+  senderId  String   @map("sender_id") @db.Uuid
+  body      String
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  claim  Claim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  sender User  @relation(fields: [senderId], references: [id])
+
+  @@map("claim_messages")
+}
+
+model ModerationReport {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportId   String    @map("report_id") @db.Uuid
+  reporterId String    @map("reporter_id") @db.Uuid
+  reason     String
+  status     String    @default("OPEN")
+  reviewedBy String?   @map("reviewed_by") @db.Uuid
+  reviewNote String?   @map("review_note")
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  reviewedAt DateTime? @map("reviewed_at") @db.Timestamptz
+
+  report   Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  reporter User   @relation("ReportedBy", fields: [reporterId], references: [id])
+  reviewer User?  @relation("ReviewedBy", fields: [reviewedBy], references: [id])
+
+  @@unique([reportId, reporterId])
+  @@map("moderation_reports")
+}
+
+model AuditEvent {
+  id             BigInt   @id @default(autoincrement())
+  organizationId String   @map("organization_id") @db.Uuid
+  actorId        String?  @map("actor_id") @db.Uuid
+  entityType     String   @map("entity_type")
+  entityId       String   @map("entity_id") @db.Uuid
+  action         String
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor        User?        @relation(fields: [actorId], references: [id])
+
+  @@index([organizationId, entityType, entityId, createdAt(sort: Desc)], map: "audit_entity_idx")
+  @@map("audit_events")
+}
+
+model Job {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kind          String
+  dedupeKey     String?   @unique @map("dedupe_key")
+  payload       Json
+  status        String    @default("QUEUED")
+  attempts      Int       @default(0)
+  maxAttempts   Int       @default(3) @map("max_attempts")
+  availableAt   DateTime  @default(now()) @map("available_at") @db.Timestamptz
+  lockedAt      DateTime? @map("locked_at") @db.Timestamptz
+  lastErrorCode String?   @map("last_error_code")
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz
+
+  @@index([availableAt, createdAt], map: "jobs_poll_idx")
+  @@map("jobs")
+}
