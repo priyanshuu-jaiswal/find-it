@@ -35,14 +35,15 @@ export class ReportsRepository {
 
   async createWithJobs(userId: string, input: CreateReportInput) {
     return prisma.$transaction(async (tx) => {
-      // 1. Verify that all referenced imageIds belong to this user and org, and are PENDING_UPLOAD
+      // 1. Verify that all referenced imageIds belong to this user and org, are not yet attached, and are PENDING_UPLOAD or READY
       if (input.imageIds && input.imageIds.length > 0) {
         const images = await tx.reportImage.findMany({
           where: {
             id: { in: input.imageIds },
             uploaderId: userId,
             organizationId: input.orgId,
-            status: 'PENDING_UPLOAD',
+            reportId: null,
+            status: { in: ['PENDING_UPLOAD', 'READY'] },
           },
         });
 
@@ -73,19 +74,28 @@ export class ReportsRepository {
         },
       });
 
-      // 3. Attach images and enqueue PROCESS_IMAGE jobs
+      // 3. Attach images and enqueue PROCESS_IMAGE jobs for pending uploads
       if (input.imageIds && input.imageIds.length > 0) {
         await tx.reportImage.updateMany({
           where: { id: { in: input.imageIds } },
           data: { reportId: report.id },
         });
 
-        for (const imageId of input.imageIds) {
+        // Only enqueue image processing jobs for images that are still in PENDING_UPLOAD
+        const pendingImages = await tx.reportImage.findMany({
+          where: {
+            id: { in: input.imageIds },
+            status: 'PENDING_UPLOAD',
+          },
+          select: { id: true },
+        });
+
+        for (const img of pendingImages) {
           await tx.job.create({
             data: {
               kind: 'PROCESS_IMAGE',
-              dedupeKey: `process_image:${imageId}`,
-              payload: { imageId },
+              dedupeKey: `process_image:${img.id}`,
+              payload: { imageId: img.id },
               status: 'QUEUED',
             },
           });
