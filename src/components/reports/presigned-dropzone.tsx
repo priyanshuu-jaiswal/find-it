@@ -35,15 +35,33 @@ export function PresignedDropzone({ orgId, onUploadSuccess, onClear }: Presigned
     try {
       setStage('uploading');
 
-      // 1. Presign slot
+      // 1. Try Direct Server-Side Upload (strips EXIF immediately & avoids browser S3 CORS)
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('orgId', orgId);
+
+      const directRes = await fetch('/api/v1/uploads/direct', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (directRes.ok) {
+        const directData = await directRes.json();
+        const { imageId, thumbUrl } = directData.data;
+        if (thumbUrl) setPreviewUrl(thumbUrl);
+        setStage('ready');
+        onUploadSuccess(imageId);
+        return;
+      }
+
+      // 2. Fallback to S3 Presigned Upload (matching PresignUploadSchema)
       const presignRes = await fetch('/api/v1/uploads/presign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orgId,
-          mimeType: selectedFile.type,
-          sizeBytes: selectedFile.size,
-          purpose: 'REPORT_IMAGE',
+          contentType: selectedFile.type,
+          byteSize: selectedFile.size,
         }),
       });
 
@@ -52,17 +70,16 @@ export function PresignedDropzone({ orgId, onUploadSuccess, onClear }: Presigned
         throw new Error(presignData.error?.message || 'Failed to initialize upload slot');
       }
 
-      const { imageId, uploadUrl } = presignData.data;
+      const { imageId, putUrl } = presignData.data;
 
-      // 2. Direct S3 Upload
-      const uploadRes = await fetch(uploadUrl, {
+      const uploadRes = await fetch(putUrl, {
         method: 'PUT',
         headers: { 'Content-Type': selectedFile.type },
         body: selectedFile,
       });
 
       if (!uploadRes.ok) {
-        throw new Error('Direct upload failed. Please try again.');
+        throw new Error('Direct S3 upload failed. Please try again.');
       }
 
       setStage('ready');

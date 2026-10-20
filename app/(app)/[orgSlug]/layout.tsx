@@ -2,7 +2,6 @@ import React from 'react';
 import { notFound } from 'next/navigation';
 import prisma from '@/src/db';
 import { getSessionUser } from '@/src/auth';
-import { PersonaBanner } from '@/src/components/layout/persona-banner';
 import { TopNavbar } from '@/src/components/layout/top-navbar';
 
 interface OrgLayoutProps {
@@ -42,9 +41,6 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-      {/* Sleek top-banner for instant local persona switching */}
-      <PersonaBanner />
-
       <TopNavbar
         orgSlug={orgSlug}
         currentUser={

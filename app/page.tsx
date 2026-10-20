@@ -6,8 +6,8 @@ import { SearchIcon, ShieldIcon, SparklesIcon, ArrowRightIcon, LockIcon } from '
 
 const TEST_PERSONAS = [
   {
-    name: 'Alice Chen',
-    email: 'alice@apex.edu',
+    name: 'Arjun Rao',
+    email: 'arjun@cmrit.ac.in',
     role: 'MEMBER',
     badge: 'Lost Item Owner',
     color: 'border-rose-200 bg-rose-50/60 text-rose-800',
@@ -15,8 +15,8 @@ const TEST_PERSONAS = [
     targetUrl: '/cmrit-lost-and-found/reports',
   },
   {
-    name: 'Bob Smith',
-    email: 'bob@apex.edu',
+    name: 'Priya Sharma',
+    email: 'priya@cmrit.ac.in',
     role: 'MEMBER',
     badge: 'Campus Finder',
     color: 'border-emerald-200 bg-emerald-50/60 text-emerald-800',
@@ -24,20 +24,29 @@ const TEST_PERSONAS = [
     targetUrl: '/cmrit-lost-and-found/reports',
   },
   {
-    name: 'Carol Davis',
-    email: 'carol@apex.edu',
+    name: 'CMRIT Safety Office',
+    email: 'security@cmrit.ac.in',
     role: 'MODERATOR',
     badge: 'Campus Safety Moderator',
     color: 'border-indigo-200 bg-indigo-50/60 text-indigo-800',
     description: 'Inspect flagged listings, take HIDE/RESTORE enforcement, and view audit trail.',
     targetUrl: '/cmrit-lost-and-found/moderation',
+    code: 'CMRIT_MOD_2026',
   },
 ];
 
 export default function HomePage() {
-  const handleSelectPersona = (email: string, targetUrl: string) => {
-    document.cookie = `findit-persona=${encodeURIComponent(email)}; path=/; max-age=86400`;
-    window.location.href = targetUrl;
+  const handleSelectPersona = async (email: string, targetUrl: string, code?: string) => {
+    try {
+      await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, moderatorCode: code }),
+      });
+      window.location.href = targetUrl;
+    } catch {
+      window.location.href = targetUrl;
+    }
   };
 
   return (
@@ -59,12 +68,20 @@ export default function HomePage() {
           </div>
         </div>
 
-        <Link
-          href="/cmrit-lost-and-found/reports"
-          className="text-xs font-bold px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl transition shadow-md shadow-indigo-600/20"
-        >
-          Open CMRIT Feed →
-        </Link>
+        <div className="flex items-center gap-2.5">
+          <Link
+            href="/login"
+            className="text-xs font-semibold px-3.5 py-2 text-slate-300 hover:text-white transition"
+          >
+            Sign In
+          </Link>
+          <Link
+            href="/cmrit-lost-and-found/reports"
+            className="text-xs font-bold px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl transition shadow-md shadow-indigo-600/20"
+          >
+            Open CMRIT Feed →
+          </Link>
+        </div>
       </header>
 
       {/* Hero */}
@@ -89,14 +106,14 @@ export default function HomePage() {
         {/* Persona quick launch */}
         <div className="pt-6">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-3">
-            Select a campus persona to launch:
+            Select a campus profile to enter or test:
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 text-left">
             {TEST_PERSONAS.map((p) => (
               <div
                 key={p.email}
-                onClick={() => handleSelectPersona(p.email, p.targetUrl)}
+                onClick={() => handleSelectPersona(p.email, p.targetUrl, p.code)}
                 className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 hover:border-indigo-500/50 hover:bg-slate-900 transition-all cursor-pointer group shadow-lg flex flex-col justify-between"
               >
                 <div>
@@ -112,7 +129,7 @@ export default function HomePage() {
                 </div>
 
                 <div className="mt-3 pt-2.5 border-t border-slate-800/80 text-[10px] font-bold text-indigo-400 flex items-center gap-1">
-                  <span>Launch as {p.name.split(' ')[0]}</span>
+                  <span>Enter as {p.name.split(' ')[0]}</span>
                   <span>→</span>
                 </div>
               </div>

@@ -37,7 +37,7 @@ async function main() {
   // 1. Ensure private S3 storage bucket
   await ensureStorageBucket();
 
-  // 2. Seed Campus Organization
+  // 2. Seed Campus Organization (Apex University for Vitest fixtures)
   const org = await prisma.organization.upsert({
     where: { slug: 'apex-university' },
     update: {},
@@ -49,7 +49,7 @@ async function main() {
   });
   console.log(`[Seed] Organization ready: ${org.name} (${org.slug})`);
 
-  // 3. Seed 3 Test Users
+  // 3. Seed 3 Test Users for automated integration tests
   const usersData = [
     {
       authSubject: 'google-oauth2|member-a-alice',
@@ -117,24 +117,83 @@ async function main() {
   });
   console.log(`[Seed] Organization ready: ${cmrit.name} (${cmrit.slug})`);
 
-  // Grant memberships for CMRIT
-  const allUsers = await prisma.user.findMany();
-  for (const u of allUsers) {
-    const role = u.email === 'carol@apex.edu' ? MemberRole.MODERATOR : MemberRole.MEMBER;
+  // 5. Seed CMRIT specific student and moderator accounts
+  const cmritUsers = [
+    {
+      authSubject: 'credentials|arjun@cmrit.ac.in',
+      email: 'arjun@cmrit.ac.in',
+      displayName: 'Arjun Rao',
+      role: MemberRole.MEMBER,
+    },
+    {
+      authSubject: 'credentials|priya@cmrit.ac.in',
+      email: 'priya@cmrit.ac.in',
+      displayName: 'Priya Sharma',
+      role: MemberRole.MEMBER,
+    },
+    {
+      authSubject: 'credentials|security@cmrit.ac.in',
+      email: 'security@cmrit.ac.in',
+      displayName: 'CMRIT Safety Office',
+      role: MemberRole.MODERATOR,
+    },
+  ];
+
+  const createdCmritUsers: Record<string, any> = {};
+
+  for (const item of cmritUsers) {
+    const user = await prisma.user.upsert({
+      where: { email: item.email },
+      update: {
+        displayName: item.displayName,
+        authSubject: item.authSubject,
+      },
+      create: {
+        email: item.email,
+        displayName: item.displayName,
+        authSubject: item.authSubject,
+      },
+    });
+
     await prisma.membership.upsert({
       where: {
         organizationId_userId: {
           organizationId: cmrit.id,
-          userId: u.id,
+          userId: user.id,
         },
       },
-      update: { role },
+      update: { role: item.role },
       create: {
         organizationId: cmrit.id,
-        userId: u.id,
-        role,
+        userId: user.id,
+        role: item.role,
       },
     });
+
+    createdCmritUsers[item.email] = user;
+    console.log(`[Seed] CMRIT User ready: ${user.displayName} (${item.role})`);
+  }
+
+  // Grant apex users access to cmrit as well (so test fixtures can cross-reference if needed)
+  const allUsers = await prisma.user.findMany();
+  for (const u of allUsers) {
+    if (!createdCmritUsers[u.email]) {
+      const role = u.email === 'carol@apex.edu' ? MemberRole.MODERATOR : MemberRole.MEMBER;
+      await prisma.membership.upsert({
+        where: {
+          organizationId_userId: {
+            organizationId: cmrit.id,
+            userId: u.id,
+          },
+        },
+        update: { role },
+        create: {
+          organizationId: cmrit.id,
+          userId: u.id,
+          role,
+        },
+      });
+    }
   }
 
   // Seed sample CMRIT items if none exist
@@ -143,14 +202,14 @@ async function main() {
   });
 
   if (existingReports === 0) {
-    const alice = allUsers.find((u) => u.email === 'alice@apex.edu')!;
-    const bob = allUsers.find((u) => u.email === 'bob@apex.edu')!;
+    const arjun = createdCmritUsers['arjun@cmrit.ac.in'];
+    const priya = createdCmritUsers['priya@cmrit.ac.in'];
 
-    // 1. Alice lost a Casio fx-991CW Calculator in Basic Science Block
+    // 1. Arjun lost a Casio fx-991CW Calculator in Basic Science Block
     await prisma.report.create({
       data: {
         organizationId: cmrit.id,
-        ownerId: alice.id,
+        ownerId: arjun.id,
         type: 'LOST',
         category: 'Electronics',
         title: 'Casio fx-991CW Scientific Calculator',
@@ -162,11 +221,11 @@ async function main() {
       },
     });
 
-    // 2. Bob found an College ID Card near Central Library
+    // 2. Priya found a College ID Card near Central Library
     await prisma.report.create({
       data: {
         organizationId: cmrit.id,
-        ownerId: bob.id,
+        ownerId: priya.id,
         type: 'FOUND',
         category: 'Documents',
         title: 'CMRIT Student Smart ID Card (CSE)',
@@ -178,11 +237,11 @@ async function main() {
       },
     });
 
-    // 3. Bob found a pair of Boat Rockerz Earbuds in Food Court
+    // 3. Priya found a pair of Boat Rockerz Earbuds in Food Court
     await prisma.report.create({
       data: {
         organizationId: cmrit.id,
-        ownerId: bob.id,
+        ownerId: priya.id,
         type: 'FOUND',
         category: 'Electronics',
         title: 'Boat Airdopes 141 Bluetooth Earbuds (Black)',

@@ -60,13 +60,15 @@ export class MatchingService {
 
         let thumbUrl: string | null = null;
         if (candidate.images[0]?.thumbObjectKey) {
-          try {
-            thumbUrl = await storageAdapter.getPresignedGetUrl(
-              candidate.images[0].thumbObjectKey,
-              3600
-            );
-          } catch {
-            thumbUrl = null;
+          const key = candidate.images[0].thumbObjectKey;
+          if (key.startsWith('data:')) {
+            thumbUrl = key;
+          } else {
+            try {
+              thumbUrl = await storageAdapter.getPresignedGetUrl(key, 3600);
+            } catch {
+              thumbUrl = null;
+            }
           }
         }
 

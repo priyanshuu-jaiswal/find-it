@@ -21,10 +21,14 @@ export class ReportsService {
       items.map(async (item) => {
         let thumbUrl: string | null = null;
         if (item.thumbObjectKey) {
-          try {
-            thumbUrl = await storageAdapter.getPresignedGetUrl(item.thumbObjectKey, 3600);
-          } catch {
-            thumbUrl = null;
+          if (item.thumbObjectKey.startsWith('data:')) {
+            thumbUrl = item.thumbObjectKey;
+          } else {
+            try {
+              thumbUrl = await storageAdapter.getPresignedGetUrl(item.thumbObjectKey, 3600);
+            } catch {
+              thumbUrl = null;
+            }
           }
         }
         return {
@@ -68,7 +72,9 @@ export class ReportsService {
       report.images
         .filter((img) => img.status === 'READY' && img.thumbObjectKey)
         .map(async (img) => {
-          const url = await storageAdapter.getPresignedGetUrl(img.thumbObjectKey!, 3600);
+          const url = img.thumbObjectKey!.startsWith('data:')
+            ? img.thumbObjectKey!
+            : await storageAdapter.getPresignedGetUrl(img.thumbObjectKey!, 3600);
           return {
             id: img.id,
             url,

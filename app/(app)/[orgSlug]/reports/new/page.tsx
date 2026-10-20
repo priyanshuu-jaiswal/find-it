@@ -51,7 +51,7 @@ export default function NewReportPage() {
       .then((data) => {
         if (data.data?.memberships && data.data.memberships.length > 0) {
           const m = data.data.memberships.find((mem: any) => mem.slug === orgSlug) || data.data.memberships[0];
-          setOrgId(m.id);
+          setOrgId(m?.orgId ?? m?.id ?? '');
         }
       })
       .catch(() => {});

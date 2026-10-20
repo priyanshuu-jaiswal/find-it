@@ -112,7 +112,7 @@ export function ModeratorConsole({
         </div>
 
         <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-full border border-indigo-200">
-          Apex University Safety Office
+          CMRIT Campus Safety Office
         </span>
       </div>
 

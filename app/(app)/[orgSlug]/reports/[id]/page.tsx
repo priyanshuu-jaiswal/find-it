@@ -83,13 +83,10 @@ export default async function ReportDetailPage({ params, searchParams }: ReportD
         color: opp.color,
         locationLabel: opp.locationLabel,
         createdAt: opp.createdAt.toISOString(),
-        images: opp.images.map((img: any) => {
-          const key = img.thumbObjectKey || img.rawObjectKey;
-          return {
-            id: img.id,
-            url: key ? `http://localhost:9000/findit-private/${key}` : undefined,
-          };
-        }),
+        images: opp.images.map((img: any) => ({
+          id: img.id,
+          url: `/api/v1/images/${img.id}`,
+        })),
       },
     };
   });
@@ -116,9 +113,9 @@ export default async function ReportDetailPage({ params, searchParams }: ReportD
           <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
             {/* Gallery / Image Area */}
             <div className="relative aspect-16/10 bg-slate-100 flex items-center justify-center border-b border-slate-100 overflow-hidden">
-              {report.images.length > 0 && report.images[0].status === 'READY' && (report.images[0].thumbObjectKey || report.images[0].rawObjectKey) ? (
+              {report.images.length > 0 && report.images[0].status === 'READY' ? (
                 <img
-                  src={`http://localhost:9000/findit-private/${report.images[0].thumbObjectKey || report.images[0].rawObjectKey}`}
+                  src={`/api/v1/images/${report.images[0].id}`}
                   alt={report.title}
                   className="w-full h-full object-cover"
                 />

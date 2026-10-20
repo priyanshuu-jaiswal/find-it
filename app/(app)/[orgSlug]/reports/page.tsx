@@ -96,14 +96,11 @@ export default async function ReportsPage({ params, searchParams }: ReportsPageP
       locationArea: r.locationArea,
       createdAt: r.createdAt.toISOString(),
       ownerId: r.ownerId,
-      images: r.images.map((img) => {
-        const key = img.thumbObjectKey || img.rawObjectKey;
-        return {
-          id: img.id,
-          url: key ? `http://localhost:9000/findit-private/${key}` : undefined,
-          status: img.status as any,
-        };
-      }),
+      images: r.images.map((img) => ({
+        id: img.id,
+        url: `/api/v1/images/${img.id}`,
+        status: img.status as any,
+      })),
       claimsCount: r.claims.length,
       matchesCount,
       isOwner,
