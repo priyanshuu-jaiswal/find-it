@@ -35,22 +35,34 @@ export class ReportsRepository {
 
   async createWithJobs(userId: string, input: CreateReportInput) {
     return prisma.$transaction(async (tx) => {
-      // 1. Verify that all referenced imageIds belong to this user and org, are not yet attached, and are PENDING_UPLOAD or READY
+      // 1. Verify that all referenced imageIds belong to this user and org, are not yet attached, and are valid/unexpired
       if (input.imageIds && input.imageIds.length > 0) {
+        const uniqueImageIds = Array.from(new Set(input.imageIds));
+        if (uniqueImageIds.length !== input.imageIds.length) {
+          throw new AppError(
+            'VALIDATION_ERROR',
+            'Duplicate image IDs are not allowed in a report'
+          );
+        }
+
+        const now = new Date();
         const images = await tx.reportImage.findMany({
           where: {
-            id: { in: input.imageIds },
+            id: { in: uniqueImageIds },
             uploaderId: userId,
             organizationId: input.orgId,
             reportId: null,
-            status: { in: ['PENDING_UPLOAD', 'READY'] },
+            OR: [
+              { status: 'READY' },
+              { status: 'PENDING_UPLOAD', expiresAt: { gt: now } },
+            ],
           },
         });
 
-        if (images.length !== input.imageIds.length) {
+        if (images.length !== uniqueImageIds.length) {
           throw new AppError(
             'VALIDATION_ERROR',
-            'One or more image IDs are invalid, do not belong to you, or have already been attached'
+            'One or more image IDs are invalid, do not belong to you, have expired, or have already been attached'
           );
         }
       }

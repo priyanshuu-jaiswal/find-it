@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import prisma from '@/src/db';
 import { getSessionUser } from '@/src/auth';
@@ -57,16 +58,15 @@ export default async function ModerationPage({ params }: ModerationPageProps) {
           <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-2xl text-xs text-indigo-900 text-left space-y-2">
             <div>
               <strong className="block font-bold">Campus Moderator Access Required:</strong>
-              Sign in with a moderator account such as{' '}
-              <span className="font-semibold text-indigo-700">security@cmrit.ac.in</span> (or use access code{' '}
-              <code className="bg-indigo-100 px-1 py-0.5 rounded text-[11px]">CMRIT_MOD_2026</code> on the sign-in page).
+              Sign in with an authorized campus security or administrator account such as{' '}
+              <span className="font-semibold text-indigo-700">admin@cmrit.ac.in</span> on the Admin Login portal.
             </div>
-            <a
+            <Link
               href="/login"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 text-white font-bold text-xs hover:bg-indigo-500 transition"
             >
               Go to Sign In Page →
-            </a>
+            </Link>
           </div>
         </div>
       </div>

@@ -27,7 +27,7 @@ export function TopNavbar({ orgSlug, currentUser }: TopNavbarProps) {
       router.push('/login');
       router.refresh();
     } catch {
-      window.location.href = '/login';
+      router.push('/login');
     }
   };
 

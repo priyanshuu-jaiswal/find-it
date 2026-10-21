@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { LockIcon, MessageSquareIcon, CheckCircleIcon, RefreshCwIcon, ArrowRightIcon } from '../ui/icons';
 
 interface Message {
@@ -36,9 +36,8 @@ export function HandoffChatPanel({
   const isApproved = status === 'APPROVED';
   const isConfirmed = status === 'HANDOFF_CONFIRMED';
 
-  const fetchMessages = async () => {
+  const fetchMessages = useCallback(async () => {
     if (!isApproved && !isConfirmed) return;
-    setIsLoading(true);
     try {
       const res = await fetch(`/api/v1/claims/${claimId}/messages`);
       const json = await res.json();
@@ -50,11 +49,27 @@ export function HandoffChatPanel({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [claimId, isApproved, isConfirmed]);
 
   useEffect(() => {
-    fetchMessages();
-  }, [claimId, status]);
+    let active = true;
+    if (isApproved || isConfirmed) {
+      fetch(`/api/v1/claims/${claimId}/messages`)
+        .then((res) => res.json())
+        .then((json) => {
+          if (active && json.data) {
+            setMessages(json.data);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (active) setIsLoading(false);
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [claimId, isApproved, isConfirmed]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

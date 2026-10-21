@@ -66,29 +66,37 @@ export default async function ClaimsPage({ params }: ClaimsPageProps) {
     orderBy: { createdAt: 'desc' },
   });
 
-  const formatClaim = (c: any): ClaimItem => ({
-    id: c.id,
-    status: c.status,
-    proofText: c.proofText,
-    decisionNote: c.decisionNote,
-    createdAt: c.createdAt.toISOString(),
-    decidedAt: c.decidedAt ? c.decidedAt.toISOString() : null,
-    report: {
-      id: c.report.id,
-      type: c.report.type,
-      title: c.report.title,
-      category: c.report.category,
-      locationLabel: c.report.locationLabel,
-      status: c.report.status,
-    },
-    claimant: {
-      id: c.claimant.id,
-      displayName: c.claimant.displayName,
-      email: c.claimant.email,
-    },
-    isOwnerOfReport: c.report.ownerId === currentUser.id,
-    isClaimant: c.claimantId === currentUser.id,
-  });
+  const formatClaim = (c: any): ClaimItem => {
+    const isOwner = c.report.ownerId === currentUser.id;
+    const isClaimant = c.claimantId === currentUser.id;
+    const isHandoffReady = c.status === 'APPROVED' || c.status === 'HANDOFF_CONFIRMED';
+    const canSeeContact = isClaimant || (isOwner && isHandoffReady);
+    const canSeeProof = isOwner || isClaimant;
+
+    return {
+      id: c.id,
+      status: c.status,
+      proofText: canSeeProof ? c.proofText : '[PROTECTED]',
+      decisionNote: c.decisionNote,
+      createdAt: c.createdAt.toISOString(),
+      decidedAt: c.decidedAt ? c.decidedAt.toISOString() : null,
+      report: {
+        id: c.report.id,
+        type: c.report.type,
+        title: c.report.title,
+        category: c.report.category,
+        locationLabel: c.report.locationLabel,
+        status: c.report.status,
+      },
+      claimant: {
+        id: c.claimant.id,
+        displayName: c.claimant.displayName,
+        email: canSeeContact ? c.claimant.email : undefined,
+      },
+      isOwnerOfReport: isOwner,
+      isClaimant: isClaimant,
+    };
+  };
 
   return (
     <div className="space-y-4">

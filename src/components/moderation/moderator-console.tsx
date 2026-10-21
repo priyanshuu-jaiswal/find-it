@@ -206,7 +206,7 @@ export function ModeratorConsole({
                         <FlagIcon className="w-3 h-3" />
                         <span>Submitted {new Date(flag.createdAt).toLocaleDateString()}</span>
                       </div>
-                      "{flag.reason}"
+                      &ldquo;{flag.reason}&rdquo;
                     </div>
                   ))}
                 </div>
@@ -298,7 +298,7 @@ export function ModeratorConsole({
                     </div>
                     {event.details?.note && (
                       <div className="text-[11px] text-slate-500 italic">
-                        Note: "{event.details.note}"
+                        Note: &ldquo;{event.details.note}&rdquo;
                       </div>
                     )}
                   </div>

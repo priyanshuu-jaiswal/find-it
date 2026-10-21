@@ -50,13 +50,6 @@ function NewReportForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const qType = searchParams?.get('type');
-    if (qType === 'FOUND' || qType === 'LOST') {
-      setType(qType);
-    }
-  }, [searchParams]);
-
-  useEffect(() => {
     fetch('/api/v1/me')
       .then((res) => res.json())
       .then((data) => {

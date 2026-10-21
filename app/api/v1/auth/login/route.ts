@@ -3,6 +3,8 @@ import prisma from '@/src/db';
 import { errorResponse } from '@/src/lib/response';
 import { AppError } from '@/src/lib/errors';
 import { hashPassword, verifyPassword } from '@/src/lib/password';
+import { createSessionToken } from '@/src/lib/session';
+import { rateLimiter, getTrustworthyClientIp } from '@/src/lib/rate-limit';
 import { MemberRole } from '@prisma/client';
 
 export async function POST(req: NextRequest) {
@@ -17,6 +19,11 @@ export async function POST(req: NextRequest) {
     const isAdminLogin = Boolean(body.isAdminLogin);
     const mode = body.mode === 'signup' ? 'signup' : 'signin';
     const displayNameInput = typeof body.displayName === 'string' ? body.displayName.trim() : '';
+
+    // Rate-limit login attempts: max 10 per IP / 5 per email per minute
+    const ip = getTrustworthyClientIp(req);
+    rateLimiter.check(`login:ip:${ip}`, 10, 60_000);
+    rateLimiter.check(`login:email:${email}`, 5, 60_000);
 
     // Enforce @cmrit.ac.in domain restriction
     if (!email.endsWith('@cmrit.ac.in')) {
@@ -88,7 +95,7 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      response.cookies.set('cmrit-session', user.email, {
+      response.cookies.set('cmrit-session', createSessionToken(user.email), {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
@@ -164,7 +171,7 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      response.cookies.set('cmrit-session', user.email, {
+      response.cookies.set('cmrit-session', createSessionToken(user.email), {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
@@ -177,10 +184,9 @@ export async function POST(req: NextRequest) {
 
     // mode === 'signin'
     if (!user) {
-      throw new AppError(
-        'UNAUTHENTICATED',
-        'No account found with this email. Please switch to Sign Up to create your account.'
-      );
+      // Execute dummy password verification to maintain constant-time response and prevent account enumeration
+      verifyPassword(password, '00000000000000000000000000000000:00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000');
+      throw new AppError('UNAUTHENTICATED', 'Invalid email or password');
     }
 
     if (user.disabledAt) {
@@ -189,7 +195,7 @@ export async function POST(req: NextRequest) {
 
     const isValidPassword = verifyPassword(password, user.passwordHash);
     if (!isValidPassword) {
-      throw new AppError('UNAUTHENTICATED', 'Incorrect password. Please try again.');
+      throw new AppError('UNAUTHENTICATED', 'Invalid email or password');
     }
 
     // Ensure membership exists
@@ -224,7 +230,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    response.cookies.set('cmrit-session', user.email, {
+    response.cookies.set('cmrit-session', createSessionToken(user.email), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',

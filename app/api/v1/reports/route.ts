@@ -4,10 +4,18 @@ import { CreateReportSchema, ListReportsQuerySchema } from '@/src/modules/report
 import { reportsService } from '@/src/modules/reports/service';
 import { successResponse, errorResponse } from '@/src/lib/response';
 import { AppError } from '@/src/lib/errors';
+import { rateLimiter } from '@/src/lib/rate-limit';
 
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
+
+    // Rate-limit report creations per user: max 15 per minute (100 in test)
+    rateLimiter.check(
+      `report:create:${user.id}`,
+      process.env.NODE_ENV === 'test' ? 100 : 15,
+      60_000
+    );
 
     const body = await req.json().catch(() => null);
     if (!body) {

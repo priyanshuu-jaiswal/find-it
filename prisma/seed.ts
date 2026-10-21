@@ -173,23 +173,62 @@ async function main() {
     },
   });
 
-  // 5. Seed ONE official Admin/Moderator account for CMRIT
-  const adminPassword = process.env.ADMIN_PASSWORD || 'CmritAdmin@2026';
-  const adminUser = await prisma.user.upsert({
+  // 5. Deliberate, safe Admin account provisioning for CMRIT
+  const existingAdmin = await prisma.user.findUnique({
     where: { email: 'admin@cmrit.ac.in' },
-    update: {
-      displayName: 'CMRIT Admin / Security',
-      authSubject: 'credentials|admin@cmrit.ac.in',
-      passwordHash: hashPassword(adminPassword),
-      disabledAt: null,
-    },
-    create: {
-      email: 'admin@cmrit.ac.in',
-      displayName: 'CMRIT Admin / Security',
-      authSubject: 'credentials|admin@cmrit.ac.in',
-      passwordHash: hashPassword(adminPassword),
-    },
   });
+
+  const shouldRotate = process.env.RESET_ADMIN_PASSWORD === 'true';
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  let adminUser;
+
+  if (existingAdmin) {
+    if (shouldRotate) {
+      if (!adminPassword && process.env.NODE_ENV === 'production') {
+        throw new Error(
+          '[Seed Security Guard] ADMIN_PASSWORD environment variable must be explicitly provided when RESET_ADMIN_PASSWORD=true in production.'
+        );
+      }
+      const newPassword = adminPassword || 'DevCmritSecurity#2026';
+      adminUser = await prisma.user.update({
+        where: { email: 'admin@cmrit.ac.in' },
+        data: {
+          displayName: 'CMRIT Admin / Security',
+          passwordHash: hashPassword(newPassword),
+          disabledAt: null,
+        },
+      });
+      console.log('[Seed] Admin password rotated via explicit RESET_ADMIN_PASSWORD flag.');
+    } else {
+      // General re-seed: Preserve existing passwordHash without unexpected resets
+      adminUser = await prisma.user.update({
+        where: { email: 'admin@cmrit.ac.in' },
+        data: {
+          displayName: 'CMRIT Admin / Security',
+          disabledAt: null,
+        },
+      });
+      console.log('[Seed] Existing admin account preserved without resetting password.');
+    }
+  } else {
+    // Initial one-time provisioning
+    if (!adminPassword && process.env.NODE_ENV === 'production') {
+      throw new Error(
+        '[Seed Security Guard] ADMIN_PASSWORD environment variable must be explicitly defined for initial production admin provisioning.'
+      );
+    }
+    const initialPassword = adminPassword || 'DevCmritSecurity#2026';
+    adminUser = await prisma.user.create({
+      data: {
+        email: 'admin@cmrit.ac.in',
+        displayName: 'CMRIT Admin / Security',
+        authSubject: 'credentials|admin@cmrit.ac.in',
+        passwordHash: hashPassword(initialPassword),
+      },
+    });
+    console.log('[Seed] Initial admin account provisioned: admin@cmrit.ac.in');
+  }
 
   await prisma.membership.upsert({
     where: {

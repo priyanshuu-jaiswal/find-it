@@ -11,11 +11,11 @@ interface PresignedDropzoneProps {
 
 /**
  * Compresses an image client-side to ensure it never exceeds Vercel's 4.5MB serverless payload limit.
- * Resizes down to maxDim (1600px) and converts to 85% quality JPEG.
+ * Resizes down to maxDim (1200px) and converts to 80% quality JPEG, typically yielding 150KB–350KB files.
  */
-async function compressImageClientSide(file: File, maxDim = 1600, quality = 0.85): Promise<File> {
-  // If file is already small (< 800KB), return as is
-  if (file.size < 800 * 1024) {
+async function compressImageClientSide(file: File, maxDim = 1200, quality = 0.80): Promise<File> {
+  // If file is already small (< 500KB) and JPEG, return as is
+  if (file.size < 500 * 1024 && file.type === 'image/jpeg') {
     return file;
   }
 
@@ -94,8 +94,8 @@ export function PresignedDropzone({ orgId, onUploadSuccess, onClear }: Presigned
       return;
     }
 
-    if (selectedFile.size > 15 * 1024 * 1024) {
-      setErrorMessage('Maximum file size is 15 MB.');
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      setErrorMessage('Maximum file size is 10 MB. Photos are automatically optimized under 4 MB for upload.');
       return;
     }
 
@@ -116,39 +116,48 @@ export function PresignedDropzone({ orgId, onUploadSuccess, onClear }: Presigned
       setStage('uploading');
 
       // 2. Direct Server-Side Upload (strips EXIF, resizes to WebP, supports DB/S3 storage)
-      const formData = new FormData();
-      formData.append('file', fileToUpload);
-      formData.append('orgId', orgId);
+      // Vercel serverless gateway strictly rejects bodies > 4.5 MB before route execution.
+      // We enforce a 4.0 MB safe ceiling to account for multipart boundary headers.
+      const VERCEL_MAX_PAYLOAD_BYTES = 4.0 * 1024 * 1024;
+      let directErrorMsg = '';
 
-      const directRes = await fetch('/api/v1/uploads/direct', {
-        method: 'POST',
-        body: formData,
-      });
+      if (fileToUpload.size <= VERCEL_MAX_PAYLOAD_BYTES) {
+        const formData = new FormData();
+        formData.append('file', fileToUpload);
+        formData.append('orgId', orgId);
 
-      if (directRes.ok) {
-        const directData = await directRes.json();
-        const { imageId, thumbUrl } = directData.data;
-        if (thumbUrl) setPreviewUrl(thumbUrl);
-        setStage('ready');
-        onUploadSuccess(imageId);
-        return;
-      }
+        const directRes = await fetch('/api/v1/uploads/direct', {
+          method: 'POST',
+          body: formData,
+        });
 
-      // If direct upload returned an error, parse it
-      let directErrorMsg = `Upload failed (Status ${directRes.status})`;
-      try {
-        const errJson = await directRes.json();
-        if (errJson.error?.message) {
-          directErrorMsg = errJson.error.message;
+        if (directRes.ok) {
+          const directData = await directRes.json();
+          const { imageId, thumbUrl } = directData.data;
+          if (thumbUrl) setPreviewUrl(thumbUrl);
+          setStage('ready');
+          onUploadSuccess(imageId);
+          return;
         }
-      } catch {
-        if (directRes.status === 413) {
-          directErrorMsg = 'File exceeds maximum upload size (4.5 MB serverless limit).';
-        } else if (directRes.status === 401) {
-          directErrorMsg = 'Your session has expired. Please sign in again.';
-        } else if (directRes.status === 404) {
-          directErrorMsg = 'Campus organization context not found. Please refresh.';
+
+        // If direct upload returned an error, parse it
+        directErrorMsg = `Upload failed (Status ${directRes.status})`;
+        try {
+          const errJson = await directRes.json();
+          if (errJson.error?.message) {
+            directErrorMsg = errJson.error.message;
+          }
+        } catch {
+          if (directRes.status === 413) {
+            directErrorMsg = 'File exceeds Vercel 4.5 MB serverless gateway limit.';
+          } else if (directRes.status === 401) {
+            directErrorMsg = 'Your session has expired. Please sign in again.';
+          } else if (directRes.status === 404) {
+            directErrorMsg = 'Campus organization context not found. Please refresh.';
+          }
         }
+      } else {
+        directErrorMsg = `Optimized photo (${(fileToUpload.size / (1024 * 1024)).toFixed(1)} MB) exceeds Vercel 4.5 MB serverless limit.`;
       }
 
       // 3. Fallback: Check if Presigned S3 Upload is configured
@@ -233,7 +242,7 @@ export function PresignedDropzone({ orgId, onUploadSuccess, onClear }: Presigned
               Upload photo (optional)
             </span>
             <span className="text-[10px] text-slate-400 block">
-              Auto-compressed • EXIF &amp; GPS stripped for privacy
+              Max 10MB (auto-optimized &lt; 4MB for Vercel) • EXIF &amp; GPS stripped
             </span>
           </div>
         </div>

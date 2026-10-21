@@ -71,7 +71,6 @@ export class ModerationService {
           select: {
             id: true,
             displayName: true,
-            email: true,
           },
         },
       },

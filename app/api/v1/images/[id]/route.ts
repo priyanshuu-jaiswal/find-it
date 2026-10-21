@@ -17,10 +17,17 @@ export async function GET(
       return new NextResponse('Image not found', { status: 404 });
     }
 
-    const key = image.thumbObjectKey || image.rawObjectKey;
-    if (!key) {
-      return new NextResponse('Image content not available', { status: 404 });
+    // Security Guard: Never serve un-sanitized raw objects directly.
+    // Only processed images with status === 'READY' and a valid thumbnail key are publicly viewable.
+    if (
+      image.status !== 'READY' ||
+      !image.thumbObjectKey ||
+      image.thumbObjectKey.startsWith('purged:')
+    ) {
+      return new NextResponse('Image is still processing or not available', { status: 404 });
     }
+
+    const key = image.thumbObjectKey;
 
     // 1. Handle base64 fallback
     if (key.startsWith('data:image/')) {

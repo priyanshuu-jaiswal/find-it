@@ -153,13 +153,16 @@ model ReportImage {
   width          Int?
   height         Int?
   sha256         String?
-  expiresAt      DateTime    @default(dbgenerated("(now() + '15 minutes'::interval)")) @map("expires_at") @db.Timestamptz
-  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz
+  expiresAt       DateTime    @default(dbgenerated("(now() + '15 minutes'::interval)")) @map("expires_at") @db.Timestamptz
+  cleanupAttempts Int         @default(0) @map("cleanup_attempts")
+  nextRetryAt     DateTime?   @map("next_retry_at") @db.Timestamptz
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz
 
   report       Report?      @relation(fields: [reportId], references: [id], onDelete: Cascade)
   uploader     User         @relation(fields: [uploaderId], references: [id])
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
+  @@index([nextRetryAt, createdAt], map: "report_images_cleanup_idx")
   @@map("report_images")
 }
 

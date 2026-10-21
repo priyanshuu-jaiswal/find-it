@@ -113,10 +113,20 @@ export class ClaimsService {
     const items = hasNextPage ? claims.slice(0, limit) : claims;
     const nextCursor = hasNextPage ? items[items.length - 1].id : null;
 
-    // Filter proofText visibility: only visible to owner, claimant, and moderators
+    // Filter proofText and contact visibility:
+    // Proof is only visible to the owner and the claimant themselves
+    // Contact email is strictly restricted:
+    // - Always visible to the claimant themselves
+    // - Visible to the report owner ONLY AFTER the claim is APPROVED or HANDOFF_CONFIRMED
+    // - Hidden from moderators and third-party members to preserve PII
     const sanitizedItems = items.map((c) => {
-      const canSeeProof =
-        c.claimantId === userId || c.report.ownerId === userId || isModerator;
+      const isOwner = c.report.ownerId === userId;
+      const isClaimant = c.claimantId === userId;
+      const isHandoffReady =
+        c.status === ClaimStatus.APPROVED || c.status === ClaimStatus.HANDOFF_CONFIRMED;
+
+      const canSeeProof = isOwner || isClaimant;
+      const canSeeContact = isClaimant || (isOwner && isHandoffReady);
 
       return {
         id: c.id,
@@ -129,7 +139,11 @@ export class ClaimsService {
         createdAt: c.createdAt,
         decidedAt: c.decidedAt,
         report: c.report,
-        claimant: c.claimant,
+        claimant: {
+          id: c.claimant.id,
+          displayName: c.claimant.displayName,
+          email: canSeeContact ? c.claimant.email : undefined,
+        },
       };
     });
 

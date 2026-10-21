@@ -25,11 +25,13 @@ export function ReportFilterBar() {
   const currentCategory = searchParams.get('category') || '';
   const currentQuery = searchParams.get('q') || '';
 
+  const [prevQuery, setPrevQuery] = useState(currentQuery);
   const [searchVal, setSearchVal] = useState(currentQuery);
 
-  useEffect(() => {
+  if (currentQuery !== prevQuery) {
+    setPrevQuery(currentQuery);
     setSearchVal(currentQuery);
-  }, [currentQuery]);
+  }
 
   const updateParams = (newType?: string, newCat?: string, newQ?: string) => {
     const params = new URLSearchParams(searchParams.toString());
