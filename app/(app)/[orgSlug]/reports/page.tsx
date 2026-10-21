@@ -37,8 +37,9 @@ export default async function ReportsPage({ params, searchParams }: ReportsPageP
     status: 'OPEN',
   };
 
-  if (type && (type === 'LOST' || type === 'FOUND')) {
-    where.type = type;
+  const effectiveType = type ? type : 'FOUND';
+  if (effectiveType === 'LOST' || effectiveType === 'FOUND') {
+    where.type = effectiveType;
   }
 
   if (category) {
@@ -109,27 +110,61 @@ export default async function ReportsPage({ params, searchParams }: ReportsPageP
 
   return (
     <div className="space-y-6">
-      {/* Top Banner & Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-indigo-900 to-slate-900 text-white p-6 sm:p-8 rounded-3xl shadow-sm border border-slate-800">
-        <div>
-          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 mb-3">
-            <span>🛡️ Campus Verified System</span>
+      {/* Action Cards: I Found Something vs. I Lost Something */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Card 1: Green Accent - I Found an Item */}
+        <div className="bg-gradient-to-br from-emerald-950 via-slate-900 to-slate-900 text-white p-6 sm:p-7 rounded-3xl border border-emerald-800/40 shadow-sm flex flex-col justify-between space-y-4">
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 mb-3">
+              <span>🎁 Campus Finder</span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white">
+              I Found an Item on Campus
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-300 mt-2 leading-relaxed">
+              Post the item details and photo in the Found section so the owner can claim it.
+            </p>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
-            Campus Lost & Found Feed
-          </h1>
-          <p className="text-sm text-slate-300 max-w-xl mt-1.5 leading-relaxed">
-            Report lost items, browse found property, and let the deterministic engine compute instant candidate matches across {org.name}.
-          </p>
+
+          <div>
+            <Link
+              href={`/${orgSlug}/reports/new?type=FOUND`}
+              className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm shadow-md transition cursor-pointer w-full sm:w-auto"
+            >
+              <span>Post a Found Item →</span>
+            </Link>
+          </div>
         </div>
 
-        <Link
-          href={`/${orgSlug}/reports/new`}
-          className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm shadow-md transition shrink-0 cursor-pointer"
-        >
-          <PlusIcon className="w-4 h-4" />
-          <span>Post an Item</span>
-        </Link>
+        {/* Card 2: Indigo/Rose Accent - I Lost an Item */}
+        <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-900 text-white p-6 sm:p-7 rounded-3xl border border-indigo-800/40 shadow-sm flex flex-col justify-between space-y-4">
+          <div>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-400/30 mb-3">
+              <span>🔍 Lost Property</span>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-extrabold tracking-tight text-white">
+              I Lost an Item
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-300 mt-2 leading-relaxed">
+              Browse the Found Items list below to claim your item, or post a Lost Alert if it hasn&apos;t been turned in yet.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+            <Link
+              href={`/${orgSlug}/reports?type=FOUND`}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 shadow-sm transition cursor-pointer"
+            >
+              <span>Browse Found Items Below ↓</span>
+            </Link>
+            <Link
+              href={`/${orgSlug}/reports/new?type=LOST`}
+              className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md transition cursor-pointer"
+            >
+              <span>Post a Lost Alert</span>
+            </Link>
+          </div>
+        </div>
       </div>
 
       {/* How It Works Guidance Banner */}

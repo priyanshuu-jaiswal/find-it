@@ -1,5 +1,6 @@
 import { PrismaClient, MemberRole } from '@prisma/client';
 import { S3Client, HeadBucketCommand, CreateBucketCommand } from '@aws-sdk/client-s3';
+import { hashPassword } from '../src/lib/password';
 
 const prisma = new PrismaClient();
 
@@ -108,7 +109,10 @@ async function main() {
   // 4. Seed CMR Institute of Technology (CMRIT)
   const cmrit = await prisma.organization.upsert({
     where: { slug: 'cmrit-lost-and-found' },
-    update: {},
+    update: {
+      name: 'CMR Institute of Technology',
+      verifiedEmailDomain: 'cmrit.ac.in',
+    },
     create: {
       name: 'CMR Institute of Technology',
       slug: 'cmrit-lost-and-found',
@@ -117,146 +121,104 @@ async function main() {
   });
   console.log(`[Seed] Organization ready: ${cmrit.name} (${cmrit.slug})`);
 
-  // 5. Seed CMRIT specific student and moderator accounts
-  const cmritUsers = [
-    {
-      authSubject: 'credentials|arjun@cmrit.ac.in',
-      email: 'arjun@cmrit.ac.in',
-      displayName: 'Arjun Rao',
-      role: MemberRole.MEMBER,
-    },
-    {
-      authSubject: 'credentials|priya@cmrit.ac.in',
-      email: 'priya@cmrit.ac.in',
-      displayName: 'Priya Sharma',
-      role: MemberRole.MEMBER,
-    },
-    {
-      authSubject: 'credentials|security@cmrit.ac.in',
-      email: 'security@cmrit.ac.in',
-      displayName: 'CMRIT Safety Office',
-      role: MemberRole.MODERATOR,
-    },
-  ];
-
-  const createdCmritUsers: Record<string, any> = {};
-
-  for (const item of cmritUsers) {
-    const user = await prisma.user.upsert({
-      where: { email: item.email },
-      update: {
-        displayName: item.displayName,
-        authSubject: item.authSubject,
-      },
-      create: {
-        email: item.email,
-        displayName: item.displayName,
-        authSubject: item.authSubject,
-      },
-    });
-
-    await prisma.membership.upsert({
-      where: {
-        organizationId_userId: {
-          organizationId: cmrit.id,
-          userId: user.id,
-        },
-      },
-      update: { role: item.role },
-      create: {
-        organizationId: cmrit.id,
-        userId: user.id,
-        role: item.role,
-      },
-    });
-
-    createdCmritUsers[item.email] = user;
-    console.log(`[Seed] CMRIT User ready: ${user.displayName} (${item.role})`);
-  }
-
-  // Grant apex users access to cmrit as well (so test fixtures can cross-reference if needed)
-  const allUsers = await prisma.user.findMany();
-  for (const u of allUsers) {
-    if (!createdCmritUsers[u.email]) {
-      const role = u.email === 'carol@apex.edu' ? MemberRole.MODERATOR : MemberRole.MEMBER;
-      await prisma.membership.upsert({
-        where: {
-          organizationId_userId: {
-            organizationId: cmrit.id,
-            userId: u.id,
-          },
-        },
-        update: { role },
-        create: {
-          organizationId: cmrit.id,
-          userId: u.id,
-          role,
-        },
-      });
-    }
-  }
-
-  // Seed sample CMRIT items if none exist
-  const existingReports = await prisma.report.count({
+  // Clean any legacy demo reports, images, claims, messages, matches, and jobs for CMRIT
+  const cmritReports = await prisma.report.findMany({
     where: { organizationId: cmrit.id },
+    select: { id: true },
+  });
+  const reportIds = cmritReports.map((r) => r.id);
+
+  if (reportIds.length > 0) {
+    await prisma.claimMessage.deleteMany({
+      where: { claim: { reportId: { in: reportIds } } },
+    });
+    await prisma.claim.deleteMany({
+      where: { reportId: { in: reportIds } },
+    });
+    await prisma.reportMatch.deleteMany({
+      where: {
+        OR: [
+          { lostReportId: { in: reportIds } },
+          { foundReportId: { in: reportIds } },
+        ],
+      },
+    });
+    await prisma.reportImage.deleteMany({
+      where: { reportId: { in: reportIds } },
+    });
+    await prisma.moderationReport.deleteMany({
+      where: { reportId: { in: reportIds } },
+    });
+    await prisma.report.deleteMany({
+      where: { organizationId: cmrit.id },
+    });
+    console.log(`[Seed] Purged ${reportIds.length} legacy demo reports from ${cmrit.name}`);
+  }
+
+  // Clean old demo jobs
+  await prisma.job.deleteMany({
+    where: {
+      OR: [
+        { dedupeKey: { startsWith: 'compute_matches:' } },
+        { dedupeKey: { startsWith: 'process_image:' } },
+      ],
+    },
   });
 
-  if (existingReports === 0) {
-    const arjun = createdCmritUsers['arjun@cmrit.ac.in'];
-    const priya = createdCmritUsers['priya@cmrit.ac.in'];
+  // 5. Seed ONE official Admin/Moderator account for CMRIT
+  const adminPassword = process.env.ADMIN_PASSWORD || 'CmritAdmin@2026';
+  const adminUser = await prisma.user.upsert({
+    where: { email: 'admin@cmrit.ac.in' },
+    update: {
+      displayName: 'CMRIT Admin / Security',
+      authSubject: 'credentials|admin@cmrit.ac.in',
+      passwordHash: hashPassword(adminPassword),
+      disabledAt: null,
+    },
+    create: {
+      email: 'admin@cmrit.ac.in',
+      displayName: 'CMRIT Admin / Security',
+      authSubject: 'credentials|admin@cmrit.ac.in',
+      passwordHash: hashPassword(adminPassword),
+    },
+  });
 
-    // 1. Arjun lost a Casio fx-991CW Calculator in Basic Science Block
-    await prisma.report.create({
-      data: {
+  await prisma.membership.upsert({
+    where: {
+      organizationId_userId: {
         organizationId: cmrit.id,
-        ownerId: arjun.id,
-        type: 'LOST',
-        category: 'Electronics',
-        title: 'Casio fx-991CW Scientific Calculator',
-        description: 'Black scientific calculator left on desk in BS-302 during 3rd period Mathematics tutorial.',
-        brand: 'Casio',
-        color: 'Black',
-        locationLabel: 'Basic Science Block Room 302',
-        locationArea: 'Basic Science Block',
+        userId: adminUser.id,
       },
-    });
+    },
+    update: { role: MemberRole.ORG_ADMIN },
+    create: {
+      organizationId: cmrit.id,
+      userId: adminUser.id,
+      role: MemberRole.ORG_ADMIN,
+    },
+  });
+  console.log(`[Seed] CMRIT Admin ready: ${adminUser.email} (${adminUser.displayName})`);
 
-    // 2. Priya found a College ID Card near Central Library
-    await prisma.report.create({
-      data: {
-        organizationId: cmrit.id,
-        ownerId: priya.id,
-        type: 'FOUND',
-        category: 'Documents',
-        title: 'CMRIT Student Smart ID Card (CSE)',
-        description: 'Found blue lanyard ID card near library turnstiles. Handed to security reception.',
-        brand: 'CMRIT',
-        color: 'Blue',
-        locationLabel: 'Central Library Turnstiles',
-        locationArea: 'Central Library',
+  // Remove fake personas from CMRIT organization memberships
+  await prisma.membership.deleteMany({
+    where: {
+      organizationId: cmrit.id,
+      user: {
+        email: {
+          in: ['arjun@cmrit.ac.in', 'priya@cmrit.ac.in', 'security@cmrit.ac.in'],
+        },
       },
-    });
-
-    // 3. Priya found a pair of Boat Rockerz Earbuds in Food Court
-    await prisma.report.create({
-      data: {
-        organizationId: cmrit.id,
-        ownerId: priya.id,
-        type: 'FOUND',
-        category: 'Electronics',
-        title: 'Boat Airdopes 141 Bluetooth Earbuds (Black)',
-        description: 'Left on circular dining table near juice counter. Kept one sticker detail private for claim verification.',
-        brand: 'Boat',
-        color: 'Black',
-        locationLabel: 'Food Court Table 14',
-        locationArea: 'Food Court',
+    },
+  });
+  await prisma.user.deleteMany({
+    where: {
+      email: {
+        in: ['arjun@cmrit.ac.in', 'priya@cmrit.ac.in', 'security@cmrit.ac.in'],
       },
-    });
+    },
+  });
 
-    console.log('[Seed] Sample CMRIT reports created successfully.');
-  }
-
-  console.log('Database seed completed successfully.');
+  console.log('Database seed completed successfully. 0 demo items in CMRIT.');
 }
 
 main()

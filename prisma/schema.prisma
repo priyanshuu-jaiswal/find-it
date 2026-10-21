@@ -53,13 +53,14 @@ enum ImageStatus {
 }
 
 model User {
-  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  authSubject String    @unique @map("auth_subject")
-  email       String    @unique
-  displayName String    @map("display_name")
-  disabledAt  DateTime? @map("disabled_at") @db.Timestamptz
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz
-  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authSubject  String    @unique @map("auth_subject")
+  email        String    @unique
+  displayName  String    @map("display_name")
+  passwordHash String?   @map("password_hash")
+  disabledAt   DateTime? @map("disabled_at") @db.Timestamptz
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
 
   memberships        Membership[]
   reports            Report[]

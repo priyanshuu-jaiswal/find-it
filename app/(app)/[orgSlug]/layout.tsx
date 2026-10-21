@@ -1,5 +1,5 @@
 import React from 'react';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import prisma from '@/src/db';
 import { getSessionUser } from '@/src/auth';
 import { TopNavbar } from '@/src/components/layout/top-navbar';
@@ -21,37 +21,35 @@ export default async function OrgLayout({ children, params }: OrgLayoutProps) {
     notFound();
   }
 
-  // 2. Resolve current user & role
+  // 2. Resolve current user & role (Strict Authentication Gate)
   const user = await getSessionUser();
-  let userRole = 'MEMBER';
+  if (!user) {
+    redirect('/login');
+  }
 
-  if (user) {
-    const membership = await prisma.membership.findUnique({
-      where: {
-        organizationId_userId: {
-          organizationId: org.id,
-          userId: user.id,
-        },
+  let userRole = 'MEMBER';
+  const membership = await prisma.membership.findUnique({
+    where: {
+      organizationId_userId: {
+        organizationId: org.id,
+        userId: user.id,
       },
-    });
-    if (membership) {
-      userRole = membership.role;
-    }
+    },
+  });
+
+  if (membership) {
+    userRole = membership.role;
   }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       <TopNavbar
         orgSlug={orgSlug}
-        currentUser={
-          user
-            ? {
-                displayName: user.displayName,
-                email: user.email,
-                role: userRole,
-              }
-            : undefined
-        }
+        currentUser={{
+          displayName: user.displayName,
+          email: user.email,
+          role: userRole,
+        }}
       />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">

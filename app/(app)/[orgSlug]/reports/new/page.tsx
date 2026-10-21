@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import React, { useState, useEffect, Suspense } from 'react';
+import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { PresignedDropzone } from '@/src/components/reports/presigned-dropzone';
 import { ShieldIcon, ArrowRightIcon, AlertTriangleIcon } from '@/src/components/ui/icons';
@@ -28,13 +28,17 @@ const CMRIT_ZONES = [
   'Hostel Block / Campus Gate',
 ];
 
-export default function NewReportPage() {
+function NewReportForm() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const orgSlug = (params?.orgSlug as string) || 'cmrit-lost-and-found';
 
+  const queryType = searchParams?.get('type');
+  const initialType: 'LOST' | 'FOUND' = queryType === 'FOUND' ? 'FOUND' : 'LOST';
+
   const [orgId, setOrgId] = useState<string>('');
-  const [type, setType] = useState<'LOST' | 'FOUND'>('LOST');
+  const [type, setType] = useState<'LOST' | 'FOUND'>(initialType);
   const [category, setCategory] = useState<string>('Electronics');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -44,6 +48,13 @@ export default function NewReportPage() {
   const [imageIds, setImageIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const qType = searchParams?.get('type');
+    if (qType === 'FOUND' || qType === 'LOST') {
+      setType(qType);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     fetch('/api/v1/me')
@@ -336,5 +347,19 @@ export default function NewReportPage() {
         </div>
       </form>
     </div>
+  );
+}
+
+export default function NewReportPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="max-w-4xl mx-auto py-12 text-center text-xs text-slate-400">
+          Loading report form...
+        </div>
+      }
+    >
+      <NewReportForm />
+    </Suspense>
   );
 }

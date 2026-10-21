@@ -3,6 +3,7 @@ import Credentials from 'next-auth/providers/credentials';
 import Google from 'next-auth/providers/google';
 import prisma from '@/src/db';
 import { AppError } from '@/src/lib/errors';
+import { verifyPassword } from '@/src/lib/password';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: process.env.AUTH_SECRET,
@@ -35,58 +36,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         }
 
         const email = credentials.email.toLowerCase().trim();
-        let user = await prisma.user.findUnique({
+        const password = typeof credentials.password === 'string' ? credentials.password : '';
+
+        const user = await prisma.user.findUnique({
           where: { email },
         });
 
-        // Auto-provision student if first-time signing in with cmrit.ac.in
-        if (!user) {
-          const localPart = email.split('@')[0];
-          const displayName = localPart
-            .split('.')
-            .map((s: string) => s.charAt(0).toUpperCase() + s.slice(1))
-            .join(' ');
-
-          user = await prisma.user.create({
-            data: {
-              email,
-              displayName: `${displayName} (Student)`,
-              authSubject: `credentials|${email}`,
-            },
-          });
-        }
-
-        if (user.disabledAt) {
+        if (!user || user.disabledAt) {
           return null;
         }
 
-        // Ensure membership in cmrit-lost-and-found
-        const cmrit = await prisma.organization.findUnique({
-          where: { slug: 'cmrit-lost-and-found' },
-        });
-
-        if (cmrit) {
-          const isModerator =
-            credentials.moderatorCode === 'CMRIT_MOD_2026' ||
-            email.includes('security') ||
-            email.includes('moderator');
-
-          const role = isModerator ? 'MODERATOR' : 'MEMBER';
-
-          await prisma.membership.upsert({
-            where: {
-              organizationId_userId: {
-                organizationId: cmrit.id,
-                userId: user.id,
-              },
-            },
-            update: isModerator ? { role: 'MODERATOR' } : {},
-            create: {
-              organizationId: cmrit.id,
-              userId: user.id,
-              role,
-            },
-          });
+        if (user.passwordHash && !verifyPassword(password, user.passwordHash)) {
+          return null;
         }
 
         return {

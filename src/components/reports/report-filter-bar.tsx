@@ -20,7 +20,8 @@ export function ReportFilterBar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const currentType = searchParams.get('type') || '';
+  const rawType = searchParams.get('type');
+  const effectiveType = rawType ? rawType : 'FOUND';
   const currentCategory = searchParams.get('category') || '';
   const currentQuery = searchParams.get('q') || '';
 
@@ -33,7 +34,7 @@ export function ReportFilterBar() {
   const updateParams = (newType?: string, newCat?: string, newQ?: string) => {
     const params = new URLSearchParams(searchParams.toString());
 
-    const t = newType !== undefined ? newType : currentType;
+    const t = newType !== undefined ? newType : effectiveType;
     const c = newCat !== undefined ? newCat : currentCategory;
     const q = newQ !== undefined ? newQ : currentQuery;
 
@@ -51,39 +52,39 @@ export function ReportFilterBar() {
 
   return (
     <div className="bg-white p-2.5 sm:p-3 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-      {/* Left: Segmented [ All | Lost | Found ] Pill Toggle */}
+      {/* Left: Segmented [ Found Items | Lost Alerts | All ] Pill Toggle */}
       <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200/60 shrink-0">
-        <button
-          onClick={() => updateParams('')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-            currentType === ''
-              ? 'bg-white text-slate-900 shadow-xs'
-              : 'text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          All Items
-        </button>
-        <button
-          onClick={() => updateParams('LOST')}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-            currentType === 'LOST'
-              ? 'bg-white text-rose-700 shadow-xs'
-              : 'text-slate-500 hover:text-slate-800'
-          }`}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-          Lost
-        </button>
         <button
           onClick={() => updateParams('FOUND')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-            currentType === 'FOUND'
-              ? 'bg-white text-emerald-700 shadow-xs'
+            effectiveType === 'FOUND'
+              ? 'bg-white text-emerald-700 shadow-xs font-bold'
               : 'text-slate-500 hover:text-slate-800'
           }`}
         >
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-          Found
+          Found Items
+        </button>
+        <button
+          onClick={() => updateParams('LOST')}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+            effectiveType === 'LOST'
+              ? 'bg-white text-rose-700 shadow-xs font-bold'
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+          Lost Alerts
+        </button>
+        <button
+          onClick={() => updateParams('ALL')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+            effectiveType === 'ALL'
+              ? 'bg-white text-slate-900 shadow-xs font-bold'
+              : 'text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          All
         </button>
       </div>
 

@@ -10,6 +10,7 @@ export default defineConfig(({ mode }) => {
       environment: 'node',
       globals: true,
       fileParallelism: false,
+      maxWorkers: 1,
       env: {
         ...env,
         DATABASE_URL: env.DATABASE_URL || 'postgresql://findit:findit@localhost:5432/findit?schema=public',
