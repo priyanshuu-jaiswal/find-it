@@ -42,11 +42,16 @@ export function HandoffWorkspace({
   currentUserId,
   orgSlug,
 }: HandoffWorkspaceProps) {
-  const [box, setBox] = useState<'incoming' | 'outgoing'>('incoming');
+  const hasPendingIncoming = initialIncoming.some((c) => c.status === 'PENDING');
+  const defaultBox = hasPendingIncoming || initialIncoming.length > 0 ? 'incoming' : initialOutgoing.length > 0 ? 'outgoing' : 'incoming';
+
+  const [box, setBox] = useState<'incoming' | 'outgoing'>(defaultBox);
   const [incomingClaims, setIncomingClaims] = useState(initialIncoming);
   const [outgoingClaims, setOutgoingClaims] = useState(initialOutgoing);
+
+  const initialList = defaultBox === 'incoming' ? initialIncoming : initialOutgoing;
   const [selectedId, setSelectedId] = useState<string | null>(
-    (initialIncoming[0] || initialOutgoing[0])?.id || null
+    (initialList[0] || initialIncoming[0] || initialOutgoing[0])?.id || null
   );
 
   const [decisionNote, setDecisionNote] = useState('');
@@ -100,26 +105,31 @@ export function HandoffWorkspace({
                 setBox('incoming');
                 if (incomingClaims[0]) setSelectedId(incomingClaims[0].id);
               }}
-              className={`py-1.5 rounded-lg transition cursor-pointer ${
+              className={`py-1.5 px-2 rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5 ${
                 box === 'incoming'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'hover:text-slate-900'
               }`}
             >
-              Incoming ({incomingClaims.length})
+              <span>Incoming Claims ({incomingClaims.length})</span>
+              {incomingClaims.filter((c) => c.status === 'PENDING').length > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] font-extrabold bg-rose-500 text-white animate-pulse">
+                  {incomingClaims.filter((c) => c.status === 'PENDING').length}
+                </span>
+              )}
             </button>
             <button
               onClick={() => {
                 setBox('outgoing');
                 if (outgoingClaims[0]) setSelectedId(outgoingClaims[0].id);
               }}
-              className={`py-1.5 rounded-lg transition cursor-pointer ${
+              className={`py-1.5 px-2 rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5 ${
                 box === 'outgoing'
                   ? 'bg-white text-slate-900 shadow-xs'
                   : 'hover:text-slate-900'
               }`}
             >
-              Outgoing ({outgoingClaims.length})
+              <span>Outgoing Claims ({outgoingClaims.length})</span>
             </button>
           </div>
         </div>

@@ -38,7 +38,7 @@ export default async function ClaimsPage({ params }: ClaimsPageProps) {
     },
     include: {
       report: {
-        select: { id: true, title: true, type: true, category: true, locationLabel: true, status: true },
+        select: { id: true, title: true, type: true, category: true, locationLabel: true, status: true, ownerId: true },
       },
       claimant: {
         select: { id: true, displayName: true, email: true },
@@ -57,7 +57,7 @@ export default async function ClaimsPage({ params }: ClaimsPageProps) {
     },
     include: {
       report: {
-        select: { id: true, title: true, type: true, category: true, locationLabel: true, status: true },
+        select: { id: true, title: true, type: true, category: true, locationLabel: true, status: true, ownerId: true },
       },
       claimant: {
         select: { id: true, displayName: true, email: true },

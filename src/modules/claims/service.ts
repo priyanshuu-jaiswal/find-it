@@ -8,7 +8,7 @@ import {
   ConfirmHandoffInput,
 } from './schema';
 import { AppError } from '@/src/lib/errors';
-import { ClaimStatus, MemberRole, Prisma, ReportStatus } from '@prisma/client';
+import { ClaimStatus, MemberRole, Prisma, ReportStatus, ReportType } from '@prisma/client';
 
 export class ClaimsService {
   async submitClaim(userId: string, reportId: string, input: CreateClaimInput) {
@@ -339,6 +339,45 @@ export class ClaimsService {
           status: ClaimStatus.REJECTED,
           decisionNote: 'Auto-rejected: item handoff was confirmed via another claim',
           decidedAt: new Date(),
+        },
+      });
+
+      // 5. Auto-resolve linked opposite reports owned by claimant
+      const oppositeType =
+        claim.report.type === ReportType.FOUND ? ReportType.LOST : ReportType.FOUND;
+
+      const linkedMatches = await tx.reportMatch.findMany({
+        where: {
+          organizationId: claim.report.organizationId,
+          OR: [
+            { lostReportId: claim.reportId },
+            { foundReportId: claim.reportId },
+          ],
+        },
+        select: {
+          lostReportId: true,
+          foundReportId: true,
+        },
+      });
+
+      const matchedReportIds = linkedMatches.map((m) =>
+        m.lostReportId === claim.reportId ? m.foundReportId : m.lostReportId
+      );
+
+      await tx.report.updateMany({
+        where: {
+          organizationId: claim.report.organizationId,
+          ownerId: claim.claimantId,
+          type: oppositeType,
+          status: ReportStatus.OPEN,
+          OR: [
+            { category: claim.report.category },
+            ...(matchedReportIds.length > 0 ? [{ id: { in: matchedReportIds } }] : []),
+          ],
+        },
+        data: {
+          status: ReportStatus.RESOLVED,
+          resolvedAt: new Date(),
         },
       });
 

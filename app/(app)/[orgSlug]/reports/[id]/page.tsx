@@ -106,6 +106,23 @@ export default async function ReportDetailPage({ params, searchParams }: ReportD
         </Link>
       </div>
 
+      {/* Item Resolved Banner */}
+      {report.status === 'RESOLVED' && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-center gap-3 text-emerald-900 shadow-xs">
+          <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
+            ✓
+          </div>
+          <div>
+            <h3 className="font-extrabold text-sm text-emerald-950">
+              Item Returned to Owner
+            </h3>
+            <p className="text-xs text-emerald-700">
+              This listing has been resolved and removed from the active campus feed.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Split-Pane Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left Column (60%): Public Item Dossier */}
@@ -278,6 +295,23 @@ export default async function ReportDetailPage({ params, searchParams }: ReportD
                 </div>
               )}
             </div>
+          ) : report.status === 'RESOLVED' ? (
+            /* RESOLVED STATE BANNER */
+            <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-6 text-emerald-900 space-y-3 shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                  ✓
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-emerald-950">
+                    Item Returned to Owner
+                  </h3>
+                  <p className="text-xs text-emerald-700 leading-relaxed">
+                    This listing has been resolved and removed from the active feed.
+                  </p>
+                </div>
+              </div>
+            </div>
           ) : (
             /* NON-OWNER WORKSPACE: Claim Submission CTA */
             <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 space-y-5">
@@ -287,10 +321,12 @@ export default async function ReportDetailPage({ params, searchParams }: ReportD
                 </div>
                 <div>
                   <h3 className="text-sm font-extrabold text-slate-900">
-                    {isLost ? 'Found this item?' : 'Is this your item?'}
+                    {isLost ? 'Found This Item? Notify the Owner' : 'Is This Your Lost Item? Submit a Claim'}
                   </h3>
                   <p className="text-[11px] text-slate-500">
-                    Submit private verification proof to begin recovery.
+                    {isLost
+                      ? 'Submit details about where you found this item to connect with the owner.'
+                      : 'Submit private verification proof to begin recovery.'}
                   </p>
                 </div>
               </div>
@@ -319,6 +355,7 @@ export default async function ReportDetailPage({ params, searchParams }: ReportD
                   orgSlug={orgSlug}
                   isOwner={false}
                   reportStatus={report.status}
+                  reportType={report.type}
                   showClaimForm={true}
                 />
               )}

@@ -2,13 +2,36 @@ import { reportsRepository } from './repository';
 import { reportsPolicy } from './policy';
 import { CreateReportInput, ListReportsQuery, UpdateReportInput } from './schema';
 import { storageAdapter } from '../uploads/storage-adapter';
+import { candidatesService } from '../matching/candidates';
+import prisma from '@/src/db';
 import { AppError } from '@/src/lib/errors';
 
 export class ReportsService {
   async createReport(userId: string, input: CreateReportInput) {
     // Enforce tenant membership (cross-org attempts return 404)
     await reportsPolicy.requireOrgMembership(userId, input.orgId);
-    return reportsRepository.createWithJobs(userId, input);
+    const report = await reportsRepository.createWithJobs(userId, input);
+
+    // Compute candidate matches immediately so they appear in real-time
+    try {
+      await candidatesService.computeMatchesForReport(report.id, report.organizationId);
+      if (process.env.NODE_ENV !== 'test') {
+        await prisma.job.updateMany({
+          where: {
+            dedupeKey: `compute_matches:${report.id}`,
+            status: 'QUEUED',
+          },
+          data: {
+            status: 'DONE',
+            attempts: 1,
+          },
+        });
+      }
+    } catch {
+      // Background worker or cron will process the job if inline computation errors
+    }
+
+    return report;
   }
 
   async listReports(userId: string, query: ListReportsQuery) {
@@ -119,6 +142,14 @@ export class ReportsService {
     await reportsPolicy.requireCanModifyReport(userId, report);
 
     const updated = await reportsRepository.updateWithOptimisticLock(id, input);
+
+    // Recompute candidate matches immediately on report update
+    try {
+      await candidatesService.computeMatchesForReport(updated.id, updated.organizationId);
+    } catch {
+      // Ignore
+    }
+
     return { data: updated };
   }
 

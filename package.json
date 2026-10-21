@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "worker:dev": "tsx --env-file=.env watch src/jobs/worker.ts",
     "build": "next build --webpack",
     "start": "next start",

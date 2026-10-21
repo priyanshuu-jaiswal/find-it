@@ -157,7 +157,7 @@ export function MatchCandidateCard({ match, orgSlug, onDismiss }: MatchCandidate
           href={`/${orgSlug}/reports/${match.report.id}`}
           className="text-xs font-bold text-indigo-600 hover:text-indigo-800"
         >
-          Compare Details →
+          View & Claim This Match →
         </Link>
       </div>
     </div>

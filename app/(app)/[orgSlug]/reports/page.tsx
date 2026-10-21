@@ -31,10 +31,10 @@ export default async function ReportsPage({ params, searchParams }: ReportsPageP
 
   const currentUser = await getSessionUser();
 
-  // Build query filters
+  // Build query filters (only active OPEN reports appear in the discovery feed)
   const where: any = {
     organizationId: org.id,
-    status: { in: ['OPEN', 'RESOLVED'] },
+    status: 'OPEN',
   };
 
   if (type && (type === 'LOST' || type === 'FOUND')) {
@@ -130,6 +130,43 @@ export default async function ReportsPage({ params, searchParams }: ReportsPageP
           <PlusIcon className="w-4 h-4" />
           <span>Post an Item</span>
         </Link>
+      </div>
+
+      {/* How It Works Guidance Banner */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4 bg-slate-50 border border-slate-200/80 rounded-2xl">
+        <div className="flex items-start gap-3 p-2">
+          <div className="w-7 h-7 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold shrink-0">
+            1
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-slate-900">Post or Browse</h4>
+            <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+              Report a lost item or post property you found on campus with photo and zone.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-start gap-3 p-2">
+          <div className="w-7 h-7 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold shrink-0">
+            2
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-slate-900">Instant Matching</h4>
+            <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+              Our deterministic scoring engine computes candidate matches in real time.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-start gap-3 p-2">
+          <div className="w-7 h-7 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold shrink-0">
+            3
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-slate-900">Claim & Secure Return</h4>
+            <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+              Submit proof, unlock gated handoff chat upon approval, and confirm safe return.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Filter Bar */}

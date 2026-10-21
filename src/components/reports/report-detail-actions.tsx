@@ -9,6 +9,7 @@ interface ReportDetailActionsProps {
   orgSlug: string;
   isOwner: boolean;
   reportStatus: string;
+  reportType?: 'LOST' | 'FOUND';
   showClaimForm?: boolean;
 }
 
@@ -17,6 +18,7 @@ export function ReportDetailActions({
   orgSlug,
   isOwner,
   reportStatus,
+  reportType = 'FOUND',
   showClaimForm = false,
 }: ReportDetailActionsProps) {
   const router = useRouter();
@@ -158,14 +160,20 @@ export function ReportDetailActions({
             <form onSubmit={handleClaim} className="space-y-3">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Private Verification Proof * (10–1500 chars)
+                  {reportType === 'LOST'
+                    ? 'Found Location & Item Details * (10–1500 chars)'
+                    : 'Private Verification Proof * (10–1500 chars)'}
                 </label>
                 <textarea
                   rows={4}
                   required
                   value={proofText}
                   onChange={(e) => setProofText(e.target.value)}
-                  placeholder="Describe secret or distinguishing details (e.g. lockscreen wallpaper, serial number, contents inside pouch, stickers)..."
+                  placeholder={
+                    reportType === 'LOST'
+                      ? 'Describe where and when you found it, item condition, or where it is safely stored for retrieval (e.g. Department Office, Library front desk)...'
+                      : 'Describe secret or distinguishing details (e.g. lockscreen wallpaper, serial number, contents inside pouch, stickers)...'
+                  }
                   className="w-full text-xs p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 leading-relaxed"
                 />
               </div>
@@ -173,7 +181,9 @@ export function ReportDetailActions({
               <div className="p-3 bg-slate-900 text-white rounded-xl text-[11px] flex items-start gap-2">
                 <ShieldIcon className="w-3.5 h-3.5 text-emerald-400 mt-0.5 shrink-0" />
                 <span className="text-slate-300">
-                  Your proof text is encrypted, excluded from public endpoints, and visible strictly to the report owner and campus safety moderators.
+                  {reportType === 'LOST'
+                    ? 'Your submission is shared securely with the report owner and campus safety moderators.'
+                    : 'Your proof text is encrypted, excluded from public endpoints, and visible strictly to the report owner and campus safety moderators.'}
                 </span>
               </div>
 
@@ -188,7 +198,11 @@ export function ReportDetailActions({
                 disabled={isClaiming || !proofText.trim()}
                 className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer"
               >
-                {isClaiming ? 'Submitting Claim...' : 'Submit Ownership Claim'}
+                {isClaiming
+                  ? 'Submitting...'
+                  : reportType === 'LOST'
+                  ? 'Notify Owner / Submit Found Report'
+                  : 'Submit Ownership Claim'}
               </button>
 
               <div className="flex items-center justify-between pt-2">
