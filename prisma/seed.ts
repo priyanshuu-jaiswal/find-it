@@ -35,6 +35,14 @@ async function ensureStorageBucket() {
 async function main() {
   console.log('Seeding database...');
 
+  // Ensure schema compatibility (password_hash column)
+  try {
+    await prisma.$executeRawUnsafe(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash TEXT;`);
+    console.log('[Seed] Schema check: password_hash column verified.');
+  } catch (schemaErr) {
+    console.warn('[Seed] Warning: Schema check skipped:', (schemaErr as Error).message);
+  }
+
   // 1. Ensure private S3 storage bucket
   await ensureStorageBucket();
 

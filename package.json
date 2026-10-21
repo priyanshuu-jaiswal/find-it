@@ -15,6 +15,7 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "tsx --env-file=.env prisma/seed.ts",
+    "db:schema:fix": "tsx --env-file=.env scripts/ensure-password-hash.ts",
     "db:studio": "prisma studio",
     "benchmark": "tsx scripts/benchmark-matching.ts"
   },
