@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/v1/internal/worker/tick",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
