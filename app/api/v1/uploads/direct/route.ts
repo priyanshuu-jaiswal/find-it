@@ -6,6 +6,7 @@ import { requireAuth } from '@/src/auth';
 import { storageAdapter } from '@/src/modules/uploads/storage-adapter';
 import { successResponse, errorResponse } from '@/src/lib/response';
 import { AppError } from '@/src/lib/errors';
+import logger from '@/src/lib/logger';
 import { ALLOWED_IMAGE_TYPES, MAX_UPLOAD_BYTES } from '@/src/modules/uploads/schema';
 
 export async function POST(req: NextRequest) {
@@ -77,11 +78,19 @@ export async function POST(req: NextRequest) {
 
     let storedThumbKey = thumbObjectKey;
 
-    // Attempt to store in S3/MinIO
-    try {
-      await storageAdapter.putObject(thumbObjectKey, processedBuffer, 'image/webp');
-    } catch {
-      // If external S3/MinIO is unreachable (e.g. serverless Vercel without S3), store base64 WebP fallback
+    // Check if external cloud storage (MinIO / Supabase S3 / AWS S3) is active
+    if (storageAdapter.isStorageEnabled()) {
+      try {
+        await storageAdapter.putObject(thumbObjectKey, processedBuffer, 'image/webp');
+        logger.info({ imageId, thumbObjectKey }, 'Stored image in external storage');
+      } catch (storageErr) {
+        logger.warn(
+          { storageErr, imageId },
+          'External storage unavailable; falling back to WebP database storage'
+        );
+        storedThumbKey = `data:image/webp;base64,${processedBuffer.toString('base64')}`;
+      }
+    } else {
       storedThumbKey = `data:image/webp;base64,${processedBuffer.toString('base64')}`;
     }
 
@@ -111,6 +120,7 @@ export async function POST(req: NextRequest) {
       201
     );
   } catch (err) {
+    logger.error({ err }, 'Direct image upload failed');
     return errorResponse(err);
   }
 }

@@ -11,12 +11,39 @@ const envSchema = z.object({
   DATABASE_URL: z.string().url(),
   DIRECT_URL: z.string().url().optional(),
 
-  STORAGE_ENDPOINT: z.string().default('http://localhost:9000'),
-  STORAGE_REGION: z.string().default('us-east-1'),
-  STORAGE_BUCKET: z.string().default('findit-private'),
-  STORAGE_ACCESS_KEY_ID: z.string().default('minioadmin'),
-  STORAGE_SECRET_ACCESS_KEY: z.string().default('minioadminpassword'),
-  STORAGE_FORCE_PATH_STYLE: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(true),
+  STORAGE_ENDPOINT: z.string().default(() => {
+    return (
+      process.env.STORAGE_ENDPOINT ||
+      process.env.SUPABASE_S3_ENDPOINT ||
+      (process.env.SUPABASE_URL ? `${process.env.SUPABASE_URL.replace(/\/$/, '')}/storage/v1/s3` : '') ||
+      (process.env.NEXT_PUBLIC_SUPABASE_URL ? `${process.env.NEXT_PUBLIC_SUPABASE_URL.replace(/\/$/, '')}/storage/v1/s3` : '') ||
+      'http://localhost:9000'
+    );
+  }),
+  STORAGE_REGION: z.string().default(() => {
+    return process.env.STORAGE_REGION || process.env.SUPABASE_REGION || 'us-east-1';
+  }),
+  STORAGE_BUCKET: z.string().default(() => {
+    return process.env.STORAGE_BUCKET || process.env.SUPABASE_STORAGE_BUCKET || 'findit-private';
+  }),
+  STORAGE_ACCESS_KEY_ID: z.string().default(() => {
+    return (
+      process.env.STORAGE_ACCESS_KEY_ID ||
+      process.env.SUPABASE_S3_ACCESS_KEY_ID ||
+      'minioadmin'
+    );
+  }),
+  STORAGE_SECRET_ACCESS_KEY: z.string().default(() => {
+    return (
+      process.env.STORAGE_SECRET_ACCESS_KEY ||
+      process.env.SUPABASE_S3_SECRET_ACCESS_KEY ||
+      'minioadminpassword'
+    );
+  }),
+  STORAGE_FORCE_PATH_STYLE: z.preprocess(
+    (val) => (val !== undefined && val !== null ? val === 'true' || val === true : true),
+    z.boolean()
+  ).default(true),
 
   MAIL_FROM: z.string().default('FindIt <no-reply@example.test>'),
   MAIL_API_KEY: z.string().optional(),

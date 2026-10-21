@@ -61,13 +61,17 @@ In your Vercel project settings under **Settings > Environment Variables**, add 
 | `AUTH_SECRET` | Cryptographic secret for Auth.js v5 | Generate via `openssl rand -base64 32` |
 | `DATABASE_URL` | Neon/Supabase pooled connection string | `postgresql://user:pass@ep-xyz-pooler.us-east-1.aws.neon.tech/cmrit-lost-and-found?sslmode=require` |
 | `DIRECT_URL` | Neon/Supabase direct connection string | `postgresql://user:pass@ep-xyz.us-east-1.aws.neon.tech/cmrit-lost-and-found?sslmode=require` |
-| `STORAGE_ENDPOINT` | S3-compatible storage endpoint | `https://s3.us-east-1.amazonaws.com` (or Cloudflare R2 / Supabase Storage S3 URL) |
-| `STORAGE_REGION` | Storage region | `us-east-1` (or `auto` for Cloudflare R2) |
-| `STORAGE_BUCKET` | Private bucket name | `cmrit-private-storage` |
-| `STORAGE_ACCESS_KEY_ID` | Storage access key ID | `your_access_key` |
-| `STORAGE_SECRET_ACCESS_KEY` | Storage secret access key | `your_secret_key` |
-| `STORAGE_FORCE_PATH_STYLE` | Path-style flag for S3 (set `false` for AWS S3/R2) | `false` |
+| `STORAGE_ENDPOINT` | S3-compatible storage endpoint | `https://<ref>.supabase.co/storage/v1/s3` or `https://s3.us-east-1.amazonaws.com` (leave unset for zero-config DB WebP fallback) |
+| `STORAGE_REGION` | Storage region | `us-east-1` (or your Supabase region like `ap-south-1`) |
+| `STORAGE_BUCKET` | Private bucket name | `findit-private` (created under Supabase Storage) |
+| `STORAGE_ACCESS_KEY_ID` | Storage access key ID | Supabase S3 Access Key ID (Settings > Storage > S3 Access Keys) |
+| `STORAGE_SECRET_ACCESS_KEY` | Storage secret access key | Supabase S3 Secret Access Key |
+| `STORAGE_FORCE_PATH_STYLE` | Path-style flag for S3 | `true` for Supabase / MinIO, `false` for AWS S3 |
 | `WORKER_SECRET` | Secret token protecting internal worker tick endpoints | Generate via `openssl rand -hex 24` |
+
+> **Note on Storage Modes:**
+> 1. **Zero-Configuration Mode:** If you do not configure external S3/Supabase storage variables on Vercel, the app automatically detects this in production and uses direct server-side Sharp processing + database-backed WebP thumbnails. Images upload instantly without needing an external S3 bucket!
+> 2. **Supabase Storage (Recommended for High Volume):** Go to Supabase Dashboard > **Storage** > create a bucket named `findit-private` (private bucket). Then go to **Project Settings > Storage > S3 Access Keys** and click **New Access Key**. Copy the Access Key ID and Secret Access Key into Vercel environment variables above.
 
 ---
 
