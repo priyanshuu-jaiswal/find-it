@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
     if (!storageAdapter.isStorageEnabled()) {
       throw new AppError(
         'VALIDATION_ERROR',
-        'External S3 storage is not configured for presigned uploads. Please use direct upload.'
+        'Cloud storage (S3/R2) is not configured in this deployment. Photos over 4.3 MB require cloud storage. Please configure STORAGE_* environment variables or choose a photo under 4.3 MB.'
       );
     }
 

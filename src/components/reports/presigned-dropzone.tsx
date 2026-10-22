@@ -127,8 +127,8 @@ export function PresignedDropzone({ orgId, onUploadSuccess, onClear }: Presigned
 
       // 2. Direct Server-Side Upload (strips EXIF, resizes to WebP, supports DB/S3 storage)
       // Vercel serverless gateway strictly rejects bodies > 4.5 MB before route execution.
-      // We enforce a 4.0 MB safe ceiling to account for multipart boundary headers.
-      const VERCEL_MAX_PAYLOAD_BYTES = 4.0 * 1024 * 1024;
+      // We enforce a 4.3 MB safe ceiling to account for multipart boundary headers (~1KB).
+      const VERCEL_MAX_PAYLOAD_BYTES = 4.3 * 1024 * 1024;
       let directErrorMsg = '';
 
       if (fileToUpload.size <= VERCEL_MAX_PAYLOAD_BYTES) {
@@ -159,7 +159,7 @@ export function PresignedDropzone({ orgId, onUploadSuccess, onClear }: Presigned
           }
         } catch {
           if (directRes.status === 413) {
-            directErrorMsg = 'File exceeds upload size limit.';
+            directErrorMsg = 'Photo exceeds upload size limit.';
           } else if (directRes.status === 401) {
             directErrorMsg = 'Your session has expired. Please sign in again.';
           } else if (directRes.status === 404) {
@@ -173,10 +173,10 @@ export function PresignedDropzone({ orgId, onUploadSuccess, onClear }: Presigned
           throw new Error(directErrorMsg || 'Upload failed due to an invalid image file.');
         }
       } else {
-        directErrorMsg = `Photo size (${(fileToUpload.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4 MB direct upload limit.`;
+        directErrorMsg = `Photo size (${(fileToUpload.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4.3 MB direct upload limit.`;
       }
 
-      // 3. Fallback: Check if Presigned S3 Upload is configured
+      // 3. Fallback: Presigned S3/R2 direct-to-bucket upload for large photos up to 10 MB
       const effectiveContentType =
         fileToUpload.type ||
         (isHeicOrHeif ? 'image/heic' : 'image/jpeg');
@@ -196,7 +196,12 @@ export function PresignedDropzone({ orgId, onUploadSuccess, onClear }: Presigned
         try {
           const presignJson = await presignRes.json();
           if (presignJson.error?.message) {
-            presignErrorMsg = presignJson.error.message;
+            const rawMsg = presignJson.error.message;
+            if (rawMsg.includes('storage is not configured') || rawMsg.includes('Cloud storage')) {
+              presignErrorMsg = `Photo (${(fileToUpload.size / (1024 * 1024)).toFixed(1)} MB) requires cloud storage (S3/R2) to be configured in your deployment settings. Please configure storage or select a photo under 4.3 MB.`;
+            } else {
+              presignErrorMsg = rawMsg;
+            }
           }
         } catch {
           // ignore
