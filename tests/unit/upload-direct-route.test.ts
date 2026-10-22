@@ -204,4 +204,114 @@ describe('POST /api/v1/uploads/direct - Route-Level Coverage', () => {
     expect(body.error?.code).toBe('VALIDATION_ERROR');
     expect(body.error?.message).toContain('Only a single file can be uploaded per request');
   });
+
+  it('successfully processes authentic HEIC photo upload and converts to WebP thumbnail', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const fixturePath = path.resolve(__dirname, '../fixtures/sample.heic');
+    if (!fs.existsSync(fixturePath)) return;
+
+    const heicBuffer = fs.readFileSync(fixturePath);
+    const formData = new FormData();
+    const file = new File([heicBuffer], 'iphone_photo.heic', { type: 'image/heic' });
+    formData.append('file', file);
+    formData.append('orgId', dummyOrgId);
+
+    const req = new NextRequest('http://localhost:3000/api/v1/uploads/direct', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const res = await directUploadRoute(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(body.data).toBeDefined();
+    expect(body.data.imageId).toBeDefined();
+    expect(body.data.thumbUrl).toBeDefined();
+    expect(prisma.reportImage.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          contentType: 'image/webp',
+          status: 'READY',
+        }),
+      })
+    );
+  });
+
+  it('successfully infers HEIC type when client sends empty MIME type with .heic filename', async () => {
+    const fs = await import('fs');
+    const path = await import('path');
+    const fixturePath = path.resolve(__dirname, '../fixtures/sample.heic');
+    if (!fs.existsSync(fixturePath)) return;
+
+    const heicBuffer = fs.readFileSync(fixturePath);
+    const formData = new FormData();
+    // iOS Safari sometimes leaves file.type empty
+    const file = new File([heicBuffer], 'IMG_0123.HEIC', { type: '' });
+    formData.append('file', file);
+    formData.append('orgId', dummyOrgId);
+
+    const req = new NextRequest('http://localhost:3000/api/v1/uploads/direct', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const res = await directUploadRoute(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(body.data?.imageId).toBeDefined();
+  });
+
+  it('rejects corrupt HEIC upload with 400 VALIDATION_ERROR instead of 500 internal error', async () => {
+    const corruptHeic = Buffer.alloc(40);
+    corruptHeic.writeUInt32BE(40, 0);
+    corruptHeic.write('ftyp', 4);
+    corruptHeic.write('heic', 8);
+    corruptHeic.fill(0xff, 12);
+
+    const formData = new FormData();
+    const file = new File([corruptHeic], 'broken.heic', { type: 'image/heic' });
+    formData.append('file', file);
+    formData.append('orgId', dummyOrgId);
+
+    const req = new NextRequest('http://localhost:3000/api/v1/uploads/direct', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const res = await directUploadRoute(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error?.code).toBe('VALIDATION_ERROR');
+    expect(body.error?.message).toMatch(/Failed to decode HEIC|Image parsing failed|corrupted/);
+  });
+
+  it('rejects declared MIME type that does not match detected signature', async () => {
+    // Generate valid JPEG but claim it is PNG
+    const jpegBuffer = await sharp({
+      create: { width: 50, height: 50, channels: 3, background: { r: 255, g: 0, b: 0 } },
+    })
+      .jpeg()
+      .toBuffer();
+
+    const formData = new FormData();
+    const file = new File([jpegBuffer], 'fake.png', { type: 'image/png' });
+    formData.append('file', file);
+    formData.append('orgId', dummyOrgId);
+
+    const req = new NextRequest('http://localhost:3000/api/v1/uploads/direct', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const res = await directUploadRoute(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(body.error?.code).toBe('VALIDATION_ERROR');
+    expect(body.error?.message).toContain('does not match detected image format');
+  });
 });

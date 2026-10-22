@@ -25,6 +25,7 @@ export function ReportDetailActions({
 
   // Withdraw state
   const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
 
   // Flag state
   const [showFlagModal, setShowFlagModal] = useState(false);
@@ -44,15 +45,19 @@ export function ReportDetailActions({
       return;
     }
     setIsWithdrawing(true);
+    setWithdrawError(null);
     try {
       const res = await fetch(`/api/v1/reports/${reportId}/withdraw`, {
         method: 'POST',
       });
       if (res.ok) {
         window.location.reload();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setWithdrawError(data?.error?.message || 'Failed to withdraw report.');
       }
     } catch {
-      // Ignore
+      setWithdrawError('Network error while withdrawing report.');
     } finally {
       setIsWithdrawing(false);
     }
@@ -120,15 +125,22 @@ export function ReportDetailActions({
     <div className="space-y-4">
       {/* Owner controls */}
       {isOwner && reportStatus === 'OPEN' && (
-        <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-xs">
-          <span className="text-slate-500">Need to cancel this listing?</span>
-          <button
-            onClick={handleWithdraw}
-            disabled={isWithdrawing}
-            className="px-3 py-1.5 rounded-lg font-semibold bg-rose-50 text-rose-700 hover:bg-rose-100 transition cursor-pointer"
-          >
-            {isWithdrawing ? 'Withdrawing...' : 'Withdraw Report'}
-          </button>
+        <div className="space-y-2 pt-3 border-t border-slate-100">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-slate-500">Need to cancel this listing?</span>
+            <button
+              onClick={handleWithdraw}
+              disabled={isWithdrawing}
+              className="px-3 py-1.5 rounded-lg font-semibold bg-rose-50 text-rose-700 hover:bg-rose-100 disabled:opacity-50 transition cursor-pointer"
+            >
+              {isWithdrawing ? 'Withdrawing...' : 'Withdraw Report'}
+            </button>
+          </div>
+          {withdrawError && (
+            <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 font-medium">
+              {withdrawError}
+            </div>
+          )}
         </div>
       )}
 

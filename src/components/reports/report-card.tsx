@@ -102,7 +102,10 @@ export function ReportCard({ report, orgSlug }: ReportCardProps) {
             <MapPinIcon className="w-3 h-3 text-slate-300 shrink-0" />
             <span className="truncate">{report.locationLabel}</span>
           </span>
-          <span className="text-[10px] font-medium text-slate-100/90 bg-slate-900/60 px-2 py-1 rounded-md backdrop-blur-md">
+          <span
+            suppressHydrationWarning
+            className="text-[10px] font-medium text-slate-100/90 bg-slate-900/60 px-2 py-1 rounded-md backdrop-blur-md"
+          >
             {timeAgo(report.createdAt)}
           </span>
         </div>

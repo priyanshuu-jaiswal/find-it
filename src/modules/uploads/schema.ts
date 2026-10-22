@@ -1,12 +1,18 @@
 import { z } from 'zod';
 
-export const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export const ALLOWED_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/heic',
+  'image/heif',
+] as const;
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10MB
 
 export const PresignUploadSchema = z.object({
   orgId: z.string().uuid(),
   contentType: z.enum(ALLOWED_IMAGE_TYPES, {
-    message: 'contentType must be one of image/jpeg, image/png, image/webp',
+    message: 'contentType must be one of image/jpeg, image/png, image/webp, image/heic, image/heif',
   }),
   byteSize: z
     .number()

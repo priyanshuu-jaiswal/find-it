@@ -311,6 +311,106 @@ describe('Presigned Object-Storage Security & Lifecycle Enforcement', () => {
         `raw/${dummyOrgId}/${dummyImageId}.jpg`
       );
     });
+
+    it('successfully processes genuine HEIC raw object, converts to WebP thumbnail, and purges raw object', async () => {
+      const fs = await import('fs');
+      const path = await import('path');
+      const fixturePath = path.resolve(__dirname, '../fixtures/sample.heic');
+      if (!fs.existsSync(fixturePath)) return;
+
+      const heicBuffer = fs.readFileSync(fixturePath);
+
+      vi.mocked(prisma.reportImage.findUnique).mockResolvedValue({
+        id: dummyImageId,
+        uploaderId: dummyUserId,
+        organizationId: dummyOrgId,
+        rawObjectKey: `raw/${dummyOrgId}/${dummyImageId}.heic`,
+        thumbObjectKey: null,
+        status: 'PENDING_UPLOAD',
+        contentType: 'image/heic',
+        byteSize: BigInt(heicBuffer.length),
+        width: null,
+        height: null,
+        sha256: null,
+        expiresAt: new Date(Date.now() + 60000),
+        createdAt: new Date(),
+      } as any);
+
+      vi.mocked(storageAdapter.headObject).mockResolvedValue({
+        contentLength: heicBuffer.length,
+        contentType: 'image/heic',
+      });
+
+      vi.mocked(storageAdapter.getObjectBuffer).mockResolvedValue(heicBuffer);
+
+      await handleProcessImage({ imageId: dummyImageId });
+
+      // Saved thumbnail as WebP
+      expect(storageAdapter.putObject).toHaveBeenCalledWith(
+        `thumb/${dummyOrgId}/${dummyImageId}.webp`,
+        expect.any(Buffer),
+        'image/webp'
+      );
+
+      // Status marked READY
+      expect(prisma.reportImage.update).toHaveBeenCalledWith({
+        where: { id: dummyImageId },
+        data: expect.objectContaining({
+          status: 'READY',
+          thumbObjectKey: `thumb/${dummyOrgId}/${dummyImageId}.webp`,
+        }),
+      });
+
+      // Raw object purged
+      expect(storageAdapter.deleteObject).toHaveBeenCalledWith(
+        `raw/${dummyOrgId}/${dummyImageId}.heic`
+      );
+    });
+
+    it('rejects corrupt HEIC raw object as non-retryable error, marks REJECTED, and purges raw object', async () => {
+      const corruptHeic = Buffer.alloc(40);
+      corruptHeic.writeUInt32BE(40, 0);
+      corruptHeic.write('ftyp', 4);
+      corruptHeic.write('heic', 8);
+      corruptHeic.fill(0xee, 12);
+
+      vi.mocked(prisma.reportImage.findUnique).mockResolvedValue({
+        id: dummyImageId,
+        uploaderId: dummyUserId,
+        organizationId: dummyOrgId,
+        rawObjectKey: `raw/${dummyOrgId}/${dummyImageId}.heic`,
+        thumbObjectKey: null,
+        status: 'PENDING_UPLOAD',
+        contentType: 'image/heic',
+        byteSize: BigInt(40),
+        width: null,
+        height: null,
+        sha256: null,
+        expiresAt: new Date(Date.now() + 60000),
+        createdAt: new Date(),
+      } as any);
+
+      vi.mocked(storageAdapter.headObject).mockResolvedValue({
+        contentLength: 40,
+        contentType: 'image/heic',
+      });
+
+      vi.mocked(storageAdapter.getObjectBuffer).mockResolvedValue(corruptHeic);
+
+      // Should complete without re-throwing (non-retryable)
+      await expect(handleProcessImage({ imageId: dummyImageId })).resolves.not.toThrow();
+
+      // Marked REJECTED
+      expect(prisma.reportImage.update).toHaveBeenCalledWith({
+        where: { id: dummyImageId },
+        data: { status: 'REJECTED' },
+      });
+
+      // Raw object purge attempted
+      expect(storageAdapter.deleteObject).toHaveBeenCalledWith(
+        `raw/${dummyOrgId}/${dummyImageId}.heic`
+      );
+    });
   });
 
   describe('Report Attachment Protection: Uploader, Expiry & Duplicate Constraints', () => {

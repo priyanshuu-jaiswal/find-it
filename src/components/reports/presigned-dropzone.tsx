@@ -88,19 +88,29 @@ export function PresignedDropzone({ orgId, onUploadSuccess, onClear }: Presigned
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileSelect = async (selectedFile: File) => {
+    const isHeicOrHeif =
+      selectedFile.type === 'image/heic' ||
+      selectedFile.type === 'image/heif' ||
+      /\.(heic|heif)$/i.test(selectedFile.name);
+
     const validMimes = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!validMimes.includes(selectedFile.type)) {
-      setErrorMessage('Please upload a valid image (JPEG, PNG, WebP).');
+    const hasValidExt = /\.(jpe?g|png|webp|heic|heif)$/i.test(selectedFile.name);
+
+    if (!validMimes.includes(selectedFile.type) && !isHeicOrHeif && !hasValidExt) {
+      setErrorMessage('Please upload a valid image (JPEG, PNG, WebP, or iPhone HEIC/HEIF photo).');
       return;
     }
 
     if (selectedFile.size > 10 * 1024 * 1024) {
-      setErrorMessage('Maximum file size is 10 MB. Photos are automatically optimized under 4 MB for upload.');
+      setErrorMessage('Maximum file size is 10 MB. Please choose a smaller photo.');
       return;
     }
 
     setFile(selectedFile);
-    setPreviewUrl(URL.createObjectURL(selectedFile));
+    // Only generate an immediate blob preview for formats browsers can natively render in <img>
+    if (!isHeicOrHeif) {
+      setPreviewUrl(URL.createObjectURL(selectedFile));
+    }
     setErrorMessage(null);
 
     try {
@@ -149,31 +159,49 @@ export function PresignedDropzone({ orgId, onUploadSuccess, onClear }: Presigned
           }
         } catch {
           if (directRes.status === 413) {
-            directErrorMsg = 'File exceeds Vercel 4.5 MB serverless gateway limit.';
+            directErrorMsg = 'File exceeds upload size limit.';
           } else if (directRes.status === 401) {
             directErrorMsg = 'Your session has expired. Please sign in again.';
           } else if (directRes.status === 404) {
             directErrorMsg = 'Campus organization context not found. Please refresh.';
           }
         }
+
+        // If direct upload failed due to client validation error (invalid format, corrupt data, bounds),
+        // immediately show the clear actionable error rather than attempting presigned fallback.
+        if (directRes.status >= 400 && directRes.status < 500 && directRes.status !== 413) {
+          throw new Error(directErrorMsg || 'Upload failed due to an invalid image file.');
+        }
       } else {
-        directErrorMsg = `Optimized photo (${(fileToUpload.size / (1024 * 1024)).toFixed(1)} MB) exceeds Vercel 4.5 MB serverless limit.`;
+        directErrorMsg = `Photo size (${(fileToUpload.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4 MB direct upload limit.`;
       }
 
       // 3. Fallback: Check if Presigned S3 Upload is configured
+      const effectiveContentType =
+        fileToUpload.type ||
+        (isHeicOrHeif ? 'image/heic' : 'image/jpeg');
+
       const presignRes = await fetch('/api/v1/uploads/presign', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           orgId,
-          contentType: fileToUpload.type,
+          contentType: effectiveContentType,
           byteSize: fileToUpload.size,
         }),
       });
 
       if (!presignRes.ok) {
-        // Presign is not available or returned error; report the direct error
-        throw new Error(directErrorMsg);
+        let presignErrorMsg = directErrorMsg;
+        try {
+          const presignJson = await presignRes.json();
+          if (presignJson.error?.message) {
+            presignErrorMsg = presignJson.error.message;
+          }
+        } catch {
+          // ignore
+        }
+        throw new Error(presignErrorMsg || 'Upload failed. Please try a different photo.');
       }
 
       const presignData = await presignRes.json();
@@ -182,7 +210,7 @@ export function PresignedDropzone({ orgId, onUploadSuccess, onClear }: Presigned
       // PUT directly to S3 bucket
       const uploadRes = await fetch(putUrl, {
         method: 'PUT',
-        headers: { 'Content-Type': fileToUpload.type },
+        headers: { 'Content-Type': effectiveContentType },
         body: fileToUpload,
       });
 
@@ -213,7 +241,7 @@ export function PresignedDropzone({ orgId, onUploadSuccess, onClear }: Presigned
       <input
         type="file"
         ref={fileInputRef}
-        accept="image/jpeg,image/png,image/webp"
+        accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"
         onChange={(e) => {
           if (e.target.files && e.target.files[0]) {
             handleFileSelect(e.target.files[0]);
@@ -242,7 +270,7 @@ export function PresignedDropzone({ orgId, onUploadSuccess, onClear }: Presigned
               Upload photo (optional)
             </span>
             <span className="text-[10px] text-slate-400 block">
-              Max 10MB (auto-optimized &lt; 4MB for Vercel) • EXIF &amp; GPS stripped
+              Max 10MB • Supports JPEG, PNG, WebP &amp; iPhone HEIC/HEIF • EXIF &amp; GPS stripped
             </span>
           </div>
         </div>

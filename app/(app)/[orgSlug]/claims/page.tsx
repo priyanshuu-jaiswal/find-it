@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import prisma from '@/src/db';
 import { getSessionUser } from '@/src/auth';
@@ -22,8 +23,16 @@ export default async function ClaimsPage({ params }: ClaimsPageProps) {
   const currentUser = await getSessionUser();
   if (!currentUser) {
     return (
-      <div className="p-8 text-center text-xs text-slate-500 bg-white rounded-2xl border border-slate-200">
-        Authentication required. Switch personas using the top persona banner.
+      <div className="p-8 text-center text-sm text-slate-600 bg-white rounded-2xl border border-slate-200 space-y-3">
+        <p>Please sign in to view your claims.</p>
+        <div>
+          <Link
+            href="/login"
+            className="inline-flex items-center px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold text-xs hover:bg-indigo-500 transition shadow-xs"
+          >
+            Sign In
+          </Link>
+        </div>
       </div>
     );
   }

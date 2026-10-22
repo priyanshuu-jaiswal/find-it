@@ -106,12 +106,6 @@ function NewReportForm() {
 
       const reportId = json.data.id;
 
-      // Trigger worker tick in dev/demo
-      fetch('/api/v1/internal/worker/tick', {
-        method: 'POST',
-        headers: { authorization: 'Bearer findit-worker-dev-secret' },
-      }).catch(() => {});
-
       router.push(`/${orgSlug}/reports/${reportId}?tab=matches`);
     } catch (err: any) {
       setErrorMessage(err.message || 'An error occurred while creating the report.');

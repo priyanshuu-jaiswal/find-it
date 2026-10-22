@@ -1,10 +1,29 @@
+export type AllowedImageMimeType =
+  | 'image/jpeg'
+  | 'image/png'
+  | 'image/webp'
+  | 'image/heic'
+  | 'image/heif';
+
+/**
+ * Checks whether the declared MIME type is compatible with the detected signature.
+ * Treats image/heic and image/heif interchangeably as they belong to the same container family.
+ */
+export function isCompatibleMimeType(declared: string, detected: string): boolean {
+  if (declared === detected) return true;
+  const isHeifFamily = (t: string) => t === 'image/heic' || t === 'image/heif';
+  if (isHeifFamily(declared) && isHeifFamily(detected)) return true;
+  return false;
+}
+
 /**
  * Detects the actual image MIME type based on header magic bytes.
  * Does not trust client-declared file extensions or Content-Type headers.
+ * Supports JPEG, PNG, WebP, and ISO/IEC 23008-12 (HEIF/HEIC).
  */
 export function detectImageSignature(
   buffer: Buffer
-): 'image/jpeg' | 'image/png' | 'image/webp' | null {
+): AllowedImageMimeType | null {
   if (!buffer || buffer.length < 12) {
     return null;
   }
@@ -40,6 +59,44 @@ export function detectImageSignature(
     buffer[11] === 0x50 // 'P'
   ) {
     return 'image/webp';
+  }
+
+  // HEIF / HEIC: ISOBMFF 'ftyp' box at offset 4
+  if (
+    buffer[4] === 0x66 && // 'f'
+    buffer[5] === 0x74 && // 't'
+    buffer[6] === 0x79 && // 'y'
+    buffer[7] === 0x70 // 'p'
+  ) {
+    const majorBrand = buffer.subarray(8, 12).toString('ascii').toLowerCase();
+    const heicBrands = new Set(['heic', 'heix', 'heim', 'heis', 'hevc', 'hevx']);
+    const heifBrands = new Set(['mif1', 'msf1']);
+
+    if (heicBrands.has(majorBrand)) {
+      return 'image/heic';
+    }
+
+    const boxSize = buffer.length >= 4 ? buffer.readUInt32BE(0) : 0;
+    const scanLimit = Math.min(boxSize > 0 ? boxSize : 64, buffer.length, 256);
+
+    // Scan compatible brands in ftyp box (starting at offset 16 in 4-byte increments)
+    for (let offset = 16; offset + 4 <= scanLimit; offset += 4) {
+      const compBrand = buffer.subarray(offset, offset + 4).toString('ascii').toLowerCase();
+      if (heicBrands.has(compBrand)) {
+        return 'image/heic';
+      }
+    }
+
+    if (heifBrands.has(majorBrand)) {
+      return 'image/heif';
+    }
+
+    for (let offset = 16; offset + 4 <= scanLimit; offset += 4) {
+      const compBrand = buffer.subarray(offset, offset + 4).toString('ascii').toLowerCase();
+      if (heifBrands.has(compBrand)) {
+        return 'image/heif';
+      }
+    }
   }
 
   return null;

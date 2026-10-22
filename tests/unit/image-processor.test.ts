@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import sharp from 'sharp';
+import fs from 'fs';
+import path from 'path';
 import { imageProcessor } from '@/src/modules/uploads/image-processor';
 
 describe('ImageProcessor EXIF and GPS Stripping', () => {
@@ -55,6 +57,35 @@ describe('ImageProcessor EXIF and GPS Stripping', () => {
 
     await expect(imageProcessor.processToThumbnail(oversizedImage)).rejects.toThrow(
       /exceed maximum allowed 4096x4096/
+    );
+  });
+
+  it('successfully decodes and converts an authentic HEIC photo to WebP thumbnail', async () => {
+    const fixturePath = path.resolve(__dirname, '../fixtures/sample.heic');
+    if (fs.existsSync(fixturePath)) {
+      const heicBuffer = fs.readFileSync(fixturePath);
+      const result = await imageProcessor.processToThumbnail(heicBuffer);
+
+      expect(result.format).toBe('webp');
+      expect(result.width).toBeLessThanOrEqual(800);
+      expect(result.height).toBeLessThanOrEqual(800);
+
+      const meta = await sharp(result.buffer).metadata();
+      expect(meta.format).toBe('webp');
+      expect(meta.exif).toBeUndefined(); // EXIF stripped
+    }
+  });
+
+  it('rejects corrupt HEIC image with a clean validation error', async () => {
+    // Valid ftyp heic box followed by random corrupted payload
+    const corruptHeic = Buffer.alloc(40);
+    corruptHeic.writeUInt32BE(40, 0);
+    corruptHeic.write('ftyp', 4);
+    corruptHeic.write('heic', 8);
+    corruptHeic.fill(0xee, 12);
+
+    await expect(imageProcessor.processToThumbnail(corruptHeic)).rejects.toThrow(
+      /Failed to decode HEIC\/HEIF photo/
     );
   });
 });

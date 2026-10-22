@@ -1,6 +1,5 @@
 import { NextRequest } from 'next/server';
 import crypto from 'crypto';
-import sharp, { Metadata } from 'sharp';
 import prisma from '@/src/db';
 import { requireAuth } from '@/src/auth';
 import { storageAdapter } from '@/src/modules/uploads/storage-adapter';
@@ -9,7 +8,8 @@ import { AppError } from '@/src/lib/errors';
 import logger from '@/src/lib/logger';
 import { rateLimiter } from '@/src/lib/rate-limit';
 import { ALLOWED_IMAGE_TYPES, MAX_UPLOAD_BYTES } from '@/src/modules/uploads/schema';
-import { detectImageSignature } from '@/src/modules/uploads/validation';
+import { detectImageSignature, isCompatibleMimeType } from '@/src/modules/uploads/validation';
+import { imageProcessor } from '@/src/modules/uploads/image-processor';
 import { createBoundedStream } from '@/src/modules/uploads/stream-limiter';
 
 export async function POST(req: NextRequest) {
@@ -93,11 +93,21 @@ export async function POST(req: NextRequest) {
       60_000
     );
 
+    // Infer MIME type if missing or generic octet-stream (common in mobile file pickers)
+    let declaredType = file.type;
+    if (!declaredType || declaredType === 'application/octet-stream') {
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      if (ext === 'heic' || ext === 'heif') declaredType = 'image/heic';
+      else if (ext === 'jpg' || ext === 'jpeg') declaredType = 'image/jpeg';
+      else if (ext === 'png') declaredType = 'image/png';
+      else if (ext === 'webp') declaredType = 'image/webp';
+    }
+
     // Validate declared MIME type
-    if (!ALLOWED_IMAGE_TYPES.includes(file.type as any)) {
+    if (!ALLOWED_IMAGE_TYPES.includes(declaredType as any)) {
       throw new AppError(
         'VALIDATION_ERROR',
-        `Unsupported file type '${file.type}'. Allowed types: ${ALLOWED_IMAGE_TYPES.join(', ')}`
+        `Unsupported file type '${file.type || declaredType || 'unknown'}'. Allowed types: ${ALLOWED_IMAGE_TYPES.join(', ')}`
       );
     }
 
@@ -117,74 +127,35 @@ export async function POST(req: NextRequest) {
     if (!detectedSignature) {
       throw new AppError(
         'VALIDATION_ERROR',
-        'Corrupted or invalid image file signature. Please upload an authentic JPEG, PNG, or WebP photo.'
+        'Corrupted or invalid image file signature. Please upload an authentic JPEG, PNG, WebP, or HEIC/HEIF photo.'
       );
     }
 
     // 2. Ensure declared MIME type matches verified magic bytes
-    if (detectedSignature !== file.type) {
+    if (!isCompatibleMimeType(declaredType, detectedSignature)) {
       throw new AppError(
         'VALIDATION_ERROR',
-        `Declared MIME type '${file.type}' does not match detected image format '${detectedSignature}'.`
+        `Declared MIME type '${declaredType}' does not match detected image format '${detectedSignature}'.`
       );
     }
 
-    // 3. Deep image validation with Sharp parser (mitigates decompression bombs and malformed files)
-    const MAX_IMAGE_DIMENSION = 4096;
-    const MAX_IMAGE_PIXELS = 16_777_216; // 4096 * 4096
-
-    let metadata: Metadata;
+    // 3. Process image thumbnail: strips EXIF/GPS, resizes to WebP, handles HEIC decoding, validates dimensions & decompression bounds
+    let processed;
     try {
-      metadata = await sharp(rawBuffer, {
-        failOn: 'error',
-        limitInputPixels: MAX_IMAGE_PIXELS,
-      }).metadata();
-    } catch {
+      processed = await imageProcessor.processToThumbnail(rawBuffer);
+    } catch (procErr: any) {
+      if (procErr instanceof AppError) {
+        throw procErr;
+      }
       throw new AppError(
         'VALIDATION_ERROR',
-        'Image parsing failed. The uploaded file is corrupted, malformed, or exceeds decompression safety limits.'
+        procErr.message || 'Image parsing failed. The uploaded file is corrupted, malformed, or exceeds decompression safety limits.'
       );
     }
 
-    if (!metadata.width || !metadata.height) {
-      throw new AppError('VALIDATION_ERROR', 'Unable to determine image dimensions.');
-    }
-
-    if (metadata.width > MAX_IMAGE_DIMENSION || metadata.height > MAX_IMAGE_DIMENSION) {
-      throw new AppError(
-        'VALIDATION_ERROR',
-        `Image dimensions (${metadata.width}x${metadata.height}) exceed maximum allowed ${MAX_IMAGE_DIMENSION}x${MAX_IMAGE_DIMENSION}.`
-      );
-    }
-
-    if (metadata.width * metadata.height > MAX_IMAGE_PIXELS) {
-      throw new AppError(
-        'VALIDATION_ERROR',
-        'Image pixel count exceeds maximum allowable decompression ceiling.'
-      );
-    }
-
-    // 4. Process image with Sharp: strip EXIF/GPS, resize to 800px max, convert to WebP
-    let processedBuffer: Buffer;
-    try {
-      processedBuffer = await sharp(rawBuffer, {
-        failOn: 'error',
-        limitInputPixels: MAX_IMAGE_PIXELS,
-      })
-        .rotate() // Auto-orient using EXIF before stripping
-        .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
-        .webp({ quality: 80, effort: 4 })
-        .toBuffer();
-    } catch {
-      throw new AppError(
-        'VALIDATION_ERROR',
-        'Failed to process image thumbnail. The file may be corrupted.'
-      );
-    }
-
-    const processedMeta = await sharp(processedBuffer).metadata();
-    const width = processedMeta.width ?? 800;
-    const height = processedMeta.height ?? 600;
+    const processedBuffer = processed.buffer;
+    const width = processed.width;
+    const height = processed.height;
 
     const imageId = crypto.randomUUID();
     const thumbObjectKey = `thumb/${orgId}/${imageId}.webp`;
@@ -210,20 +181,26 @@ export async function POST(req: NextRequest) {
     // Record READY image directly in DB. Because direct uploads process in memory
     // and write only thumbnails without creating an unpurged raw S3 object, rawObjectKey
     // is recorded as purged to avoid unnecessary orphaned raw object sweeps.
-    const reportImage = await prisma.reportImage.create({
-      data: {
-        id: imageId,
-        uploaderId: user.id,
-        organizationId: orgId,
-        rawObjectKey: `purged:${imageId}`,
-        thumbObjectKey: storedThumbKey,
-        status: 'READY',
-        contentType: 'image/webp',
-        byteSize: BigInt(processedBuffer.length),
-        width,
-        height,
-      },
-    });
+    let reportImage;
+    try {
+      reportImage = await prisma.reportImage.create({
+        data: {
+          id: imageId,
+          uploaderId: user.id,
+          organizationId: orgId,
+          rawObjectKey: `purged:${imageId}`,
+          thumbObjectKey: storedThumbKey,
+          status: 'READY',
+          contentType: 'image/webp',
+          byteSize: BigInt(processedBuffer.length),
+          width,
+          height,
+        },
+      });
+    } catch (dbErr) {
+      logger.error({ dbErr, imageId }, 'Failed to save report image in database');
+      throw new AppError('INTERNAL', 'Failed to save uploaded photo record. Please try again.');
+    }
 
     return successResponse(
       {

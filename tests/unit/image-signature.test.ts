@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectImageSignature } from '@/src/modules/uploads/validation';
+import { detectImageSignature, isCompatibleMimeType } from '@/src/modules/uploads/validation';
 
 describe('Image Magic Bytes Signature Detection', () => {
   it('correctly detects JPEG signature (FF D8 FF)', () => {
@@ -25,6 +25,32 @@ describe('Image Magic Bytes Signature Detection', () => {
     expect(detectImageSignature(webpBuffer)).toBe('image/webp');
   });
 
+  it('correctly detects HEIC signature with major brand heic', () => {
+    const heicBuffer = Buffer.alloc(24);
+    heicBuffer.writeUInt32BE(24, 0);
+    heicBuffer.write('ftyp', 4);
+    heicBuffer.write('heic', 8);
+    expect(detectImageSignature(heicBuffer)).toBe('image/heic');
+  });
+
+  it('correctly detects HEIC signature with major brand mif1 and compatible brand heic', () => {
+    const heicBuffer = Buffer.alloc(32);
+    heicBuffer.writeUInt32BE(32, 0);
+    heicBuffer.write('ftyp', 4);
+    heicBuffer.write('mif1', 8);
+    heicBuffer.writeUInt32BE(0, 12);
+    heicBuffer.write('heic', 16);
+    expect(detectImageSignature(heicBuffer)).toBe('image/heic');
+  });
+
+  it('correctly detects HEIF structural signature (msf1/mif1)', () => {
+    const heifBuffer = Buffer.alloc(24);
+    heifBuffer.writeUInt32BE(24, 0);
+    heifBuffer.write('ftyp', 4);
+    heifBuffer.write('msf1', 8);
+    expect(detectImageSignature(heifBuffer)).toBe('image/heif');
+  });
+
   it('rejects text files pretending to be JPEG (MIME spoofing)', () => {
     const textBuffer = Buffer.from('GIF89a spoof or plain text content here');
     expect(detectImageSignature(textBuffer)).toBeNull();
@@ -33,5 +59,25 @@ describe('Image Magic Bytes Signature Detection', () => {
   it('rejects truncated buffers (< 12 bytes)', () => {
     const shortBuffer = Buffer.from([0xff, 0xd8]);
     expect(detectImageSignature(shortBuffer)).toBeNull();
+  });
+
+  describe('isCompatibleMimeType', () => {
+    it('returns true when declared and detected are identical', () => {
+      expect(isCompatibleMimeType('image/jpeg', 'image/jpeg')).toBe(true);
+      expect(isCompatibleMimeType('image/png', 'image/png')).toBe(true);
+      expect(isCompatibleMimeType('image/webp', 'image/webp')).toBe(true);
+      expect(isCompatibleMimeType('image/heic', 'image/heic')).toBe(true);
+    });
+
+    it('returns true for cross-compatible HEIC and HEIF MIME types', () => {
+      expect(isCompatibleMimeType('image/heic', 'image/heif')).toBe(true);
+      expect(isCompatibleMimeType('image/heif', 'image/heic')).toBe(true);
+    });
+
+    it('returns false for mismatched MIME types', () => {
+      expect(isCompatibleMimeType('image/jpeg', 'image/png')).toBe(false);
+      expect(isCompatibleMimeType('image/png', 'image/heic')).toBe(false);
+      expect(isCompatibleMimeType('image/webp', 'image/jpeg')).toBe(false);
+    });
   });
 });

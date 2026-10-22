@@ -1,7 +1,7 @@
 import prisma from '@/src/db';
 import { storageAdapter } from '@/src/modules/uploads/storage-adapter';
 import { imageProcessor } from '@/src/modules/uploads/image-processor';
-import { detectImageSignature } from '@/src/modules/uploads/validation';
+import { detectImageSignature, isCompatibleMimeType } from '@/src/modules/uploads/validation';
 import { MAX_UPLOAD_BYTES } from '@/src/modules/uploads/schema';
 import { candidatesService } from '@/src/modules/matching/candidates';
 import { AppError } from '@/src/lib/errors';
@@ -177,11 +177,11 @@ export async function handleProcessImage(payload: ProcessImagePayload): Promise<
     const signature = detectImageSignature(rawBuffer);
     if (!signature) {
       throw new NonRetryableImageError(
-        'Corrupted or invalid image file signature. Expected authentic JPEG, PNG, or WebP photo.'
+        'Corrupted or invalid image file signature. Expected authentic JPEG, PNG, WebP, or HEIC/HEIF photo.'
       );
     }
 
-    if (signature !== reportImage.contentType) {
+    if (!isCompatibleMimeType(reportImage.contentType, signature)) {
       throw new NonRetryableImageError(
         `Image signature (${signature}) does not match declared content type (${reportImage.contentType})`
       );
