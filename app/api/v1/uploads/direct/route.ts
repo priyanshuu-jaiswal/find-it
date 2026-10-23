@@ -12,6 +12,27 @@ import { detectImageSignature, isCompatibleMimeType } from '@/src/modules/upload
 import { imageProcessor } from '@/src/modules/uploads/image-processor';
 import { createBoundedStream } from '@/src/modules/uploads/stream-limiter';
 
+let dropConstraintPromise: Promise<void> | null = null;
+async function ensureConstraintDropped() {
+  if (!dropConstraintPromise) {
+    dropConstraintPromise = (async () => {
+      try {
+        if (typeof prisma.$executeRawUnsafe === 'function') {
+          await prisma.$executeRawUnsafe(
+            'ALTER TABLE report_images DROP CONSTRAINT IF EXISTS report_images_thumb_object_key_key;'
+          );
+          await prisma.$executeRawUnsafe(
+            'DROP INDEX IF EXISTS report_images_thumb_object_key_key;'
+          );
+        }
+      } catch (e) {
+        logger.warn({ err: e }, 'Could not proactively drop thumb_object_key constraint');
+      }
+    })();
+  }
+  return dropConstraintPromise;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const user = await requireAuth(req);
@@ -178,6 +199,9 @@ export async function POST(req: NextRequest) {
       storedThumbKey = `data:image/webp;base64,${processedBuffer.toString('base64')}`;
     }
 
+    // Ensure legacy unique constraint on thumb_object_key is dropped before saving large thumbnails
+    await ensureConstraintDropped();
+
     // Record READY image directly in DB. Because direct uploads process in memory
     // and write only thumbnails without creating an unpurged raw S3 object, rawObjectKey
     // is recorded as purged to avoid unnecessary orphaned raw object sweeps.
@@ -197,9 +221,51 @@ export async function POST(req: NextRequest) {
           height,
         },
       });
-    } catch (dbErr) {
-      logger.error({ dbErr, imageId }, 'Failed to save report image in database');
-      throw new AppError('INTERNAL', 'Failed to save uploaded photo record. Please try again.');
+    } catch (dbErr: any) {
+      // Self-heal: If legacy B-tree unique index on thumb_object_key fails on large base64 thumbnails (Postgres 54000),
+      // drop the constraint and immediately retry the insert.
+      const isIndexLimitErr =
+        dbErr?.code === 'P2010' ||
+        dbErr?.code === 'P2002' ||
+        dbErr?.message?.includes('54000') ||
+        dbErr?.message?.includes('report_images_thumb_object_key_key') ||
+        dbErr?.message?.includes('index row requires') ||
+        dbErr?.message?.includes('maximum size is 8191');
+
+      if (isIndexLimitErr) {
+        try {
+          logger.warn({ imageId }, 'Dropping legacy thumb_object_key unique constraint on demand and retrying insert');
+          dropConstraintPromise = null;
+          if (typeof prisma.$executeRawUnsafe === 'function') {
+            await prisma.$executeRawUnsafe(
+              'ALTER TABLE report_images DROP CONSTRAINT IF EXISTS report_images_thumb_object_key_key;'
+            );
+            await prisma.$executeRawUnsafe(
+              'DROP INDEX IF EXISTS report_images_thumb_object_key_key;'
+            );
+          }
+          reportImage = await prisma.reportImage.create({
+            data: {
+              id: imageId,
+              uploaderId: user.id,
+              organizationId: orgId,
+              rawObjectKey: `purged:${imageId}`,
+              thumbObjectKey: storedThumbKey,
+              status: 'READY',
+              contentType: 'image/webp',
+              byteSize: BigInt(processedBuffer.length),
+              width,
+              height,
+            },
+          });
+        } catch (retryErr) {
+          logger.error({ retryErr, imageId }, 'Failed insert retry after dropping constraint');
+          throw new AppError('INTERNAL', 'Failed to save uploaded photo record. Please try again.');
+        }
+      } else {
+        logger.error({ dbErr, imageId }, 'Failed to save report image in database');
+        throw new AppError('INTERNAL', 'Failed to save uploaded photo record. Please try again.');
+      }
     }
 
     return successResponse(

@@ -19,6 +19,7 @@ vi.mock('@/src/db', () => ({
     reportImage: {
       create: vi.fn(),
     },
+    $executeRawUnsafe: vi.fn(),
   },
 }));
 
@@ -313,5 +314,57 @@ describe('POST /api/v1/uploads/direct - Route-Level Coverage', () => {
     expect(res.status).toBe(400);
     expect(body.error?.code).toBe('VALIDATION_ERROR');
     expect(body.error?.message).toContain('does not match detected image format');
+  });
+
+  it('self-heals and drops legacy unique constraint when database throws Postgres 54000 index size error', async () => {
+    const jpegBuffer = await sharp({
+      create: { width: 100, height: 100, channels: 3, background: { r: 0, g: 255, b: 0 } },
+    })
+      .jpeg()
+      .toBuffer();
+
+    const formData = new FormData();
+    const file = new File([jpegBuffer], 'photo.jpg', { type: 'image/jpeg' });
+    formData.append('file', file);
+    formData.append('orgId', dummyOrgId);
+
+    // First create call fails with Postgres 54000 error, second call succeeds after constraint dropped
+    let callCount = 0;
+    (vi.mocked(prisma.reportImage.create) as any).mockImplementation(async ({ data }: any) => {
+      callCount++;
+      if (callCount === 1) {
+        throw new Error('index row requires 54656 bytes, maximum size is 8191 (Postgres 54000)');
+      }
+      return {
+        id: data.id,
+        reportId: null,
+        uploaderId: dummyUserId,
+        organizationId: dummyOrgId,
+        rawObjectKey: data.rawObjectKey,
+        thumbObjectKey: data.thumbObjectKey,
+        status: 'READY',
+        contentType: data.contentType,
+        byteSize: data.byteSize,
+        width: data.width,
+        height: data.height,
+        sha256: null,
+        expiresAt: new Date(),
+        createdAt: new Date(),
+      };
+    });
+
+    const req = new NextRequest('http://localhost:3000/api/v1/uploads/direct', {
+      method: 'POST',
+      body: formData,
+    });
+
+    const res = await directUploadRoute(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(201);
+    expect(body.data?.imageId).toBeDefined();
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      expect.stringContaining('ALTER TABLE report_images DROP CONSTRAINT IF EXISTS report_images_thumb_object_key_key')
+    );
   });
 });
