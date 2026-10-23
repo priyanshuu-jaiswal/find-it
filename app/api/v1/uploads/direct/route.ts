@@ -12,12 +12,20 @@ import { detectImageSignature, isCompatibleMimeType } from '@/src/modules/upload
 import { imageProcessor } from '@/src/modules/uploads/image-processor';
 import { createBoundedStream } from '@/src/modules/uploads/stream-limiter';
 
-let dropConstraintPromise: Promise<void> | null = null;
-async function ensureConstraintDropped() {
-  if (!dropConstraintPromise) {
-    dropConstraintPromise = (async () => {
+let schemaSyncPromise: Promise<void> | null = null;
+async function ensureProductionSchema() {
+  if (!schemaSyncPromise) {
+    schemaSyncPromise = (async () => {
       try {
         if (typeof prisma.$executeRawUnsafe === 'function') {
+          // 1. Ensure cleanup retry columns exist on report_images (handles unmigrated DBs)
+          await prisma.$executeRawUnsafe(
+            'ALTER TABLE report_images ADD COLUMN IF NOT EXISTS cleanup_attempts INTEGER NOT NULL DEFAULT 0;'
+          );
+          await prisma.$executeRawUnsafe(
+            'ALTER TABLE report_images ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMPTZ;'
+          );
+          // 2. Ensure legacy unique constraint on thumb_object_key is dropped to permit large thumbnails
           await prisma.$executeRawUnsafe(
             'ALTER TABLE report_images DROP CONSTRAINT IF EXISTS report_images_thumb_object_key_key;'
           );
@@ -26,11 +34,11 @@ async function ensureConstraintDropped() {
           );
         }
       } catch (e) {
-        logger.warn({ err: e }, 'Could not proactively drop thumb_object_key constraint');
+        logger.warn({ err: e }, 'Could not proactively sync schema columns');
       }
     })();
   }
-  return dropConstraintPromise;
+  return schemaSyncPromise;
 }
 
 export async function POST(req: NextRequest) {
@@ -199,8 +207,8 @@ export async function POST(req: NextRequest) {
       storedThumbKey = `data:image/webp;base64,${processedBuffer.toString('base64')}`;
     }
 
-    // Ensure legacy unique constraint on thumb_object_key is dropped before saving large thumbnails
-    await ensureConstraintDropped();
+    // Ensure production database schema has required columns and legacy constraints removed
+    await ensureProductionSchema();
 
     // Record READY image directly in DB. Because direct uploads process in memory
     // and write only thumbnails without creating an unpurged raw S3 object, rawObjectKey
@@ -222,8 +230,14 @@ export async function POST(req: NextRequest) {
         },
       });
     } catch (dbErr: any) {
-      // Self-heal: If legacy B-tree unique index on thumb_object_key fails on large base64 thumbnails (Postgres 54000),
-      // drop the constraint and immediately retry the insert.
+      // Self-heal: If unmigrated DB is missing cleanup_attempts/next_retry_at (P2022) or
+      // legacy B-tree unique index on thumb_object_key fails on large base64 thumbnails (Postgres 54000),
+      // apply schema patch on demand and immediately retry the insert.
+      const isMissingColumnErr =
+        dbErr?.code === 'P2022' ||
+        dbErr?.message?.includes('cleanup_attempts') ||
+        dbErr?.message?.includes('does not exist');
+
       const isIndexLimitErr =
         dbErr?.code === 'P2010' ||
         dbErr?.code === 'P2002' ||
@@ -232,11 +246,17 @@ export async function POST(req: NextRequest) {
         dbErr?.message?.includes('index row requires') ||
         dbErr?.message?.includes('maximum size is 8191');
 
-      if (isIndexLimitErr) {
+      if (isMissingColumnErr || isIndexLimitErr) {
         try {
-          logger.warn({ imageId }, 'Dropping legacy thumb_object_key unique constraint on demand and retrying insert');
-          dropConstraintPromise = null;
+          logger.warn({ imageId, isMissingColumnErr, isIndexLimitErr }, 'Self-healing database schema on demand and retrying insert');
+          schemaSyncPromise = null;
           if (typeof prisma.$executeRawUnsafe === 'function') {
+            await prisma.$executeRawUnsafe(
+              'ALTER TABLE report_images ADD COLUMN IF NOT EXISTS cleanup_attempts INTEGER NOT NULL DEFAULT 0;'
+            );
+            await prisma.$executeRawUnsafe(
+              'ALTER TABLE report_images ADD COLUMN IF NOT EXISTS next_retry_at TIMESTAMPTZ;'
+            );
             await prisma.$executeRawUnsafe(
               'ALTER TABLE report_images DROP CONSTRAINT IF EXISTS report_images_thumb_object_key_key;'
             );
@@ -259,7 +279,7 @@ export async function POST(req: NextRequest) {
             },
           });
         } catch (retryErr) {
-          logger.error({ retryErr, imageId }, 'Failed insert retry after dropping constraint');
+          logger.error({ retryErr, imageId }, 'Failed insert retry after self-healing schema');
           throw new AppError('INTERNAL', 'Failed to save uploaded photo record. Please try again.');
         }
       } else {

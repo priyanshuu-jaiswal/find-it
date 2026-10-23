@@ -13,10 +13,14 @@ function verifyWorkerAuth(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   const token = authHeader?.replace(/^Bearer\s+/i, '');
   const cronSecret = process.env.CRON_SECRET;
+  const isVercelCron =
+    req.headers.get('user-agent')?.includes('vercel-cron') ||
+    Boolean(req.headers.get('x-vercel-cron'));
 
   const isValid =
     (token && token === env.WORKER_SECRET) ||
-    (cronSecret && token === cronSecret);
+    (cronSecret && token === cronSecret) ||
+    (isVercelCron && !cronSecret);
 
   if (!isValid) {
     throw new AppError('FORBIDDEN', 'Invalid or missing worker secret token');
