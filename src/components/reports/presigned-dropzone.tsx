@@ -167,11 +167,9 @@ export function PresignedDropzone({ orgId, onUploadSuccess, onClear }: Presigned
           }
         }
 
-        // If direct upload failed due to client validation error (invalid format, corrupt data, bounds),
-        // immediately show the clear actionable error rather than attempting presigned fallback.
-        if (directRes.status >= 400 && directRes.status < 500 && directRes.status !== 413) {
-          throw new Error(directErrorMsg || 'Upload failed due to an invalid image file.');
-        }
+        // Direct upload is the primary path for all files <= 4.3 MB.
+        // If direct upload returned an error, report it directly rather than falling back to unconfigured cloud storage.
+        throw new Error(directErrorMsg || 'Upload failed. Please try again.');
       } else {
         directErrorMsg = `Photo size (${(fileToUpload.size / (1024 * 1024)).toFixed(1)} MB) exceeds 4.3 MB direct upload limit.`;
       }

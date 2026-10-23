@@ -146,7 +146,7 @@ model ReportImage {
   uploaderId     String      @map("uploader_id") @db.Uuid
   organizationId String      @map("organization_id") @db.Uuid
   rawObjectKey   String      @unique @map("raw_object_key")
-  thumbObjectKey String?     @unique @map("thumb_object_key")
+  thumbObjectKey String?     @map("thumb_object_key")
   status         ImageStatus @default(PENDING_UPLOAD)
   contentType    String      @map("content_type")
   byteSize       BigInt      @map("byte_size")
