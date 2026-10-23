@@ -88,8 +88,25 @@ model Organization {
   images        ReportImage[]
   matches       ReportMatch[]
   auditEvents   AuditEvent[]
+  locations     CampusLocation[]
 
   @@map("organizations")
+}
+
+model CampusLocation {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @map("organization_id") @db.Uuid
+  name           String
+  area           String?
+  isActive       Boolean      @default(true) @map("is_active")
+  sortOrder      Int          @default(0) @map("sort_order")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, isActive, sortOrder])
+  @@map("campus_locations")
 }
 
 model Membership {

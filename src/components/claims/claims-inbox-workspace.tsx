@@ -92,7 +92,7 @@ export function ClaimsInboxWorkspace({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
       {/* Left Sidebar (35%): Master List */}
-      <div className="lg:col-span-5 bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col h-[700px]">
+      <div className="lg:col-span-5 bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden flex flex-col h-[380px] sm:h-[480px] lg:h-[700px]">
         {/* Toggle between Incoming & Outgoing */}
         <div className="p-3 border-b border-slate-100 bg-slate-50/80">
           <div className="grid grid-cols-2 p-1 bg-slate-200/70 rounded-xl text-xs font-bold text-slate-600">
@@ -242,14 +242,14 @@ export function ClaimsInboxWorkspace({
                     </div>
                   )}
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
                     <button
                       onClick={() => handleDecision('APPROVED')}
                       disabled={isDeciding}
                       className="flex-1 py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl transition shadow-xs cursor-pointer flex items-center justify-center gap-1.5"
                     >
                       <CheckCircleIcon className="w-4 h-4" />
-                      <span>Approve Claim & Unlock Chat</span>
+                      <span>Approve Claim &amp; Unlock Chat</span>
                     </button>
 
                     <button

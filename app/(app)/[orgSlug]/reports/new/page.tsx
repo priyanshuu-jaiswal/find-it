@@ -45,6 +45,9 @@ function NewReportForm() {
   const [brand, setBrand] = useState('');
   const [color, setColor] = useState('');
   const [locationLabel, setLocationLabel] = useState(CMRIT_ZONES[0]);
+  const [availableLocations, setAvailableLocations] = useState<Array<{ id: string; name: string; area: string | null }>>(
+    CMRIT_ZONES.map((name, i) => ({ id: `default-${i}`, name, area: name.split(' ')[0] }))
+  );
   const [imageIds, setImageIds] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -56,6 +59,20 @@ function NewReportForm() {
         if (data.data?.memberships && data.data.memberships.length > 0) {
           const m = data.data.memberships.find((mem: any) => mem.slug === orgSlug) || data.data.memberships[0];
           setOrgId(m?.orgId ?? m?.id ?? '');
+        }
+      })
+      .catch(() => {});
+
+    // Fetch dynamic campus locations configured by campus admin
+    fetch(`/api/v1/locations?orgSlug=${orgSlug}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.data && Array.isArray(data.data) && data.data.length > 0) {
+          setAvailableLocations(data.data);
+          setLocationLabel((prev) => {
+            const exists = data.data.some((l: any) => l.name === prev);
+            return exists ? prev : data.data[0].name;
+          });
         }
       })
       .catch(() => {});
@@ -81,6 +98,9 @@ function NewReportForm() {
     setIsSubmitting(true);
     setErrorMessage(null);
 
+    const selectedLoc = availableLocations.find((l) => l.name === locationLabel);
+    const locationArea = selectedLoc?.area || locationLabel.split(' ')[0];
+
     try {
       const res = await fetch('/api/v1/reports', {
         method: 'POST',
@@ -94,7 +114,7 @@ function NewReportForm() {
           brand: brand.trim() || undefined,
           color: color.trim() || undefined,
           locationLabel,
-          locationArea: locationLabel.split(' ')[0],
+          locationArea,
           imageIds,
         }),
       });
@@ -116,7 +136,7 @@ function NewReportForm() {
   return (
     <div className="max-w-4xl mx-auto py-2">
       {/* Header bar */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <div>
           <Link
             href={`/${orgSlug}/reports`}
@@ -125,35 +145,35 @@ function NewReportForm() {
             ← Back to CMRIT Discovery Feed
           </Link>
           <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-            Post an Item to CMRIT Lost & Found
+            Post an Item to CMRIT Lost &amp; Found
           </h1>
         </div>
 
         {/* Type toggle */}
-        <div className="inline-flex p-1 bg-slate-200/80 rounded-xl text-xs font-bold shrink-0">
+        <div className="grid grid-cols-2 sm:inline-flex p-1 bg-slate-200/80 rounded-xl text-xs font-bold w-full sm:w-auto shrink-0">
           <button
             type="button"
             onClick={() => setType('LOST')}
-            className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-2 rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5 ${
               type === 'LOST'
                 ? 'bg-rose-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-white" />
-            I Lost Something
+            <span className="w-1.5 h-1.5 rounded-full bg-white shrink-0" />
+            <span>I Lost Something</span>
           </button>
           <button
             type="button"
             onClick={() => setType('FOUND')}
-            className={`px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 ${
+            className={`px-3 py-2 rounded-lg transition cursor-pointer flex items-center justify-center gap-1.5 ${
               type === 'FOUND'
                 ? 'bg-emerald-600 text-white shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-white" />
-            I Found Something
+            <span className="w-1.5 h-1.5 rounded-full bg-white shrink-0" />
+            <span>I Found Something</span>
           </button>
         </div>
       </div>
@@ -204,14 +224,14 @@ function NewReportForm() {
         <div className="md:col-span-7 bg-white p-5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3.5">
           <div>
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
-              Section 2 • Item Details & Campus Zone
+              Section 2 • Item Details &amp; Campus Zone
             </h3>
             <p className="text-xs text-slate-500">
               Provide specific item characteristics to help matching algorithms locate candidates.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Category *
@@ -231,16 +251,16 @@ function NewReportForm() {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                CMRIT Campus Zone *
+                CMRIT Campus Location / Zone *
               </label>
               <select
                 value={locationLabel}
                 onChange={(e) => setLocationLabel(e.target.value)}
                 className="w-full text-xs py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium"
               >
-                {CMRIT_ZONES.map((zone) => (
-                  <option key={zone} value={zone}>
-                    {zone}
+                {availableLocations.map((loc) => (
+                  <option key={loc.id} value={loc.name}>
+                    {loc.name}
                   </option>
                 ))}
               </select>
@@ -261,7 +281,7 @@ function NewReportForm() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
                 Brand (Optional)

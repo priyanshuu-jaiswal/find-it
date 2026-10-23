@@ -23,6 +23,7 @@ export default async function ModerationPage({ params }: ModerationPageProps) {
 
   const currentUser = await getSessionUser();
   let isModerator = false;
+  let isAdmin = false;
 
   if (currentUser) {
     const membership = await prisma.membership.findUnique({
@@ -35,6 +36,9 @@ export default async function ModerationPage({ params }: ModerationPageProps) {
     });
     if (membership && (membership.role === 'MODERATOR' || membership.role === 'ORG_ADMIN')) {
       isModerator = true;
+    }
+    if (membership && membership.role === 'ORG_ADMIN') {
+      isAdmin = true;
     }
   }
 
@@ -127,6 +131,7 @@ export default async function ModerationPage({ params }: ModerationPageProps) {
       initialAuditEvents={formattedAudit}
       orgId={org.id}
       orgSlug={orgSlug}
+      isAdmin={isAdmin}
     />
   );
 }
